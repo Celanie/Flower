@@ -95,20 +95,24 @@ No currency, no ads, no paywall. Same retention, none of the resentment.
 Morandi, by way of *A Little to the Left*: light, papery, low chroma, high
 value, everything pulled toward one shared warm grey.
 
-Three rules do most of the work, and they live in `mor()`:
+Four rules do most of the work:
 
 - **Every colour goes through one function.** Nothing in the game authors a
-  colour freely. `mor(hue, sat, lit)` clamps saturation to 5–30 and lightness
-  to 38–89, which is what makes a screen of fourteen different species read as
-  one family rather than fourteen decisions.
-- **Chroma falls with value.** `sat × (0.45 + 0.55 × lit/100)`. A dark tone
-  carrying the same saturation as a pale one reads as a poster colour, not a
-  Morandi one. This single line is the difference between the palette looking
-  muted and looking *chalky*.
+  colour freely, which is what makes a screen of fourteen different species
+  read as one family rather than fourteen decisions.
+- **Ground and figure have separate envelopes.** This is the one that matters
+  most. `mor()` paints the room — near-neutral, saturation 0–15, lightness
+  48–95. `pet()` paints the flowers — saturation 11–38, lightness 46–90. One
+  shared envelope was what made an earlier pass look *muddy*: the room and the
+  flowers sat in the same value band, so nothing could separate from anything.
+  Splitting them buys contrast without buying loudness.
+- **Chroma falls with value.** A dark tone carrying the same saturation as a
+  pale one reads as a poster colour, not a Morandi one. This single line is the
+  difference between the palette looking muted and looking *chalky*.
 - **Low chroma is not low contrast.** The room is built on a warm/cool split —
-  cool grey-beige wall, warm dark wood — because a first pass that muted
-  everything equally collapsed into one flat beige with nothing for the eye to
-  hold.
+  cool grey wall, warm wood, the window reading as the light between them —
+  because a pass that muted everything equally collapsed into one flat beige
+  with nothing for the eye to hold.
 
 Supporting the above: outlines are pencil (`rgba(86,75,60,.42)`) rather than a
 darker shade of the fill, which is most of what separates a hand-drawn look
@@ -118,6 +122,28 @@ Accessibility note: each glaze carries a **distinct relief mark** (band, dots,
 stripe, cross) as well as a colour, because in a deliberately low-chroma
 palette, colour alone is a weak signal — and for a colour-blind player it is no
 signal at all.
+
+## Legibility
+
+Everything on screen states what it is when you touch it. The three pills top
+left are buttons: the mail pill gives the count and the time to the next
+parcel, the flower pill breaks the multiplier down into the bonds and bonuses
+earning it, the streak pill explains that a missed day wilts rather than
+resets. On the sill, tapping a flower names its bonds *and what each tier
+means*; tapping an empty pot says what it is for. In the Herbarium, tapping any
+card, ornament or letter opens it.
+
+Type is one knob. Every canvas size is a design size multiplied by `UI.s`, and
+the DOM mirrors it through a `--ui` custom property, so legibility scales
+together rather than drifting apart. The tab bar sits at the bottom, in thumb
+reach, which also keeps the top row from crowding.
+
+The Herbarium scrolls by drag **and** by wheel, has a visible scrollbar and a
+bottom fade, and its page is measured rather than estimated: `bookLayout()`
+computes every position first, so the scroll range ends exactly where the
+content does. An earlier version guessed at the height and supported only
+dragging, which left the foot of the page unreachable on a desktop — the
+gesture a mouse user actually reaches for did nothing at all.
 
 ## Tuning
 
@@ -152,7 +178,10 @@ bonus. Everyone else gets hold-time, which feels the same.
 ## Content
 
 14 species, 5 colourways each, 4 mutations, 4 rarity tiers, 4 bond tiers,
-6 ornaments, 6 letters, 7 parcel types, 6 gestures. Flowers are drawn from a genome
+6 ornaments, 6 letters, 7 parcel types, 6 gestures. All 70 species-colourway
+names are checked unique and free of repeated words — "Ember" plus "Ember Cup"
+falls back to the colourway's second adjective rather than reading "Ember Ember
+Cup". Flowers are drawn from a genome
 (`{species, variant, rarity, mutation, seed}`) through a parametric renderer —
 petal count, petal silhouette, frill, curl, hue blend, centre style, stem bend —
 so the whole catalogue costs a few hundred lines and zero bytes of art.
@@ -184,14 +213,17 @@ HTTP (`localStorage` and the tests' own fixtures do not behave on `file://`):
 
 ```
 python3 -m http.server 8899 &
-node tests/framework.js     # 34 assertions
+node tests/framework.js     # 50 assertions
 node tests/playthrough.js   # opens 16 parcels end to end
 ```
 
 `tests/framework.js` covers the bond tiers, scoring (shelf accord, full sill,
 the cap), drag-to-rearrange versus tap-to-inspect, ledge hit-testing and
-placement, letter pacing, both non-flower sheet paths, and the v1→v2 save
-migration. `tests/playthrough.js` opens sixteen parcels, performing every
+placement, letter pacing, both non-flower sheet paths, the v1→v2 save
+migration, the explanatory pills, name uniqueness, and — across four viewport
+sizes from 360×640 to 520×1180 — that the wheel scrolls the Herbarium, that the
+foot of its page lands above the hint and tab bar, and that scrolling clamps at
+the top. `tests/playthrough.js` opens sixteen parcels, performing every
 gesture with real pointer events, and asserts each one reaches bloom.
 
 Two notes for anyone extending them. The suites talk to the game through

@@ -189,6 +189,76 @@ const T = (name, cond, extra='') => (cond ? ok : bad).push(name + (extra ? ' :: 
   T('ledge initialised on migration', Array.isArray(migrated.decor) && migrated.decor.length === 3);
   T('unrelated save fields survive', migrated.streak === 3, 'streak=' + migrated.streak);
 
+  // ---------- 7. the page actually ends on screen, at every size ----------
+  for (const vp of [[360,640],[390,844],[430,932],[520,1180]]){
+    const pg = await b.newPage({ viewport: { width: vp[0], height: vp[1] } });
+    pg.on('pageerror', e => errs.push('[' + vp.join('x') + '] ' + e.message));
+    await pg.goto('http://127.0.0.1:8899/index.html');
+    await pg.click('#bStart'); await pg.waitForTimeout(300);
+    await pg.evaluate(() => {
+      const r = PP.mulberry32(5);
+      PP.SPECIES.forEach(sp => { const g = PP.makeGenome(r,{sp:sp.id});
+        PP.S.book[sp.id] = {g, v:{[g.va]:1}, mu:{}, n:2}; });
+      PP.DECOR.forEach(d => PP.S.decorFound[d.id] = 1);
+      PP.S.story = PP.STORY.map(x => x.id);
+    });
+    await pg.click('#tabs button[data-s="book"]'); await pg.waitForTimeout(350);
+
+    // wheel must scroll — drag alone left the foot of the page unreachable
+    const w0 = await pg.evaluate(() => PP.V.bookScroll);
+    await pg.mouse.move(vp[0]/2, vp[1]/2);
+    await pg.mouse.wheel(0, 500);
+    await pg.waitForTimeout(200);
+    const w1 = await pg.evaluate(() => PP.V.bookScroll);
+    T(`wheel scrolls the book @${vp.join('x')}`, w1 > w0, `${w0} -> ${w1}`);
+
+    const fit = await pg.evaluate(() => {
+      PP.V.bookScroll = 1e6;
+      const L = PP.bookLayout();
+      const sc = Math.min(1e6, L.maxScroll);
+      const bottom = L.top + L.total - sc;          // screen y of the last pixel of content
+      return { bottom, H: window.innerHeight, maxScroll: L.maxScroll };
+    });
+    // the hint sits ~76px up and the tab bar below it; content must clear both
+    T(`page bottom is reachable @${vp.join('x')}`, fit.bottom <= fit.H - 86,
+      `content ends at ${fit.bottom.toFixed(0)}, needs <= ${(fit.H-86).toFixed(0)}`);
+
+    // and the top of the page is never scrolled past
+    await pg.evaluate(() => { PP.V.bookScroll = -500; });
+    await pg.waitForTimeout(120);
+    const clamped = await pg.evaluate(() => { PP.bookLayout(); return PP.V.bookScroll; });
+    T(`scroll clamps at the top @${vp.join('x')}`, clamped >= -1e-6, String(clamped));
+    await pg.close();
+  }
+
+  // ---------- 8. the pills explain themselves ----------
+  {
+    const pg = await b.newPage({ viewport: { width: 420, height: 860 } });
+    pg.on('pageerror', e => errs.push(e.message));
+    await pg.goto('http://127.0.0.1:8899/index.html');
+    await pg.click('#bStart'); await pg.waitForTimeout(300);
+    for (const [sel, re, label] of [['#pMail', /parcel|table/i, 'mail'],
+                                    ['#pHarm', /arrive/i, 'harmony'],
+                                    ['#pStreak', /row/i, 'streak']]){
+      await pg.evaluate(() => { document.getElementById('toast').textContent = ''; });
+      await pg.click(sel); await pg.waitForTimeout(250);
+      const t = await pg.evaluate(() => document.getElementById('toast').textContent);
+      T(`${label} pill explains itself`, re.test(t), JSON.stringify(t.slice(0,60)));
+    }
+    // and no flower name repeats a word
+    const bad2 = await pg.evaluate(() => {
+      const out = [];
+      for (const sp of PP.SPECIES) for (const v of PP.VARIANTS){
+        const n = PP.flowerName({sp:sp.id, va:v.id, ra:'common', mu:null, seed:1});
+        const w = n.split(' ');
+        if (new Set(w.map(x => x.toLowerCase())).size !== w.length) out.push(n);
+      }
+      return out;
+    });
+    T('no flower name repeats a word', bad2.length === 0, JSON.stringify(bad2));
+    await pg.close();
+  }
+
   console.log('PASS ' + ok.length + '\n  ' + ok.join('\n  '));
   if (bad.length) console.log('\nFAIL ' + bad.length + '\n  ' + bad.join('\n  '));
   if (errs.length) console.log('\nPAGE ERRORS:\n  ' + errs.join('\n  '));

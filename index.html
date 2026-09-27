@@ -30,25 +30,28 @@ html,body{margin:0;height:100%;overflow:hidden;background:#CFC3AE;color:var(--in
 .col>*{pointer-events:auto}
 
 #hud{position:absolute;left:0;right:0;top:0;display:flex;align-items:center;gap:6px;
-  padding:calc(env(safe-area-inset-top,0px) + 10px) 12px 0;font-size:12.5px}
+  padding:calc(env(safe-area-inset-top,0px) + 11px) 12px 0;font-size:calc(12.5px*var(--ui,1))}
 .pill{background:rgba(252,248,240,.7);border:1px solid var(--line);
-  border-radius:999px;padding:5px 10px;letter-spacing:.02em;white-space:nowrap;color:var(--ink2);
+  border-radius:999px;padding:6px 11px;letter-spacing:.02em;white-space:nowrap;color:var(--ink2);cursor:pointer;
   backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
 .pill b{font-weight:650;color:var(--ink)}
-#tabs{margin-left:auto;display:flex;gap:3px;background:rgba(252,248,240,.7);
-  border:1px solid var(--line);border-radius:999px;padding:3px;
-  backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
-#tabs button{font:inherit;font-size:12px;color:var(--ink3);background:none;border:0;
-  padding:5px 11px;border-radius:999px;cursor:pointer;transition:.18s}
+#tabs{position:absolute;left:50%;transform:translateX(-50%);
+  bottom:calc(env(safe-area-inset-bottom,0px) + 12px);
+  display:flex;gap:4px;background:rgba(252,248,240,.82);
+  border:1px solid var(--line);border-radius:999px;padding:4px;
+  box-shadow:0 4px 18px rgba(90,78,62,.12);
+  backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);transition:opacity .28s}
+#tabs button{font:inherit;font-size:calc(13.5px*var(--ui,1));color:var(--ink3);background:none;border:0;
+  padding:10px 22px;border-radius:999px;cursor:pointer;transition:.18s}
 #tabs button.on{background:var(--ink);color:#F3EDE1;font-weight:600}
 
-#hint{position:absolute;left:0;right:0;bottom:calc(env(safe-area-inset-bottom,0px) + 22px);
-  text-align:center;padding:0 26px;font-size:13.5px;color:var(--ink2);
+#hint{position:absolute;left:0;right:0;bottom:calc(env(safe-area-inset-bottom,0px) + 76px);
+  text-align:center;padding:0 24px;font-size:calc(13.5px*var(--ui,1));color:var(--ink2);
   transition:opacity .3s;line-height:1.45}
 #hint i{font-style:normal;color:#9A7B3E;font-weight:600}
 
 #toast{position:absolute;left:50%;top:42%;transform:translate(-50%,-50%);
-  font-family:var(--serif);font-size:17px;text-align:center;opacity:0;color:var(--ink);
+  font-family:var(--serif);font-size:calc(16px*var(--ui,1));text-align:center;opacity:0;color:var(--ink);
   transition:opacity .4s;pointer-events:none;padding:11px 20px;line-height:1.4;
   background:rgba(247,242,232,.92);border:1px solid var(--line);border-radius:12px;
   max-width:84%;box-shadow:0 6px 22px rgba(90,78,62,.14)}
@@ -57,12 +60,12 @@ html,body{margin:0;height:100%;overflow:hidden;background:#CFC3AE;color:var(--in
   background:linear-gradient(to top,var(--card) 34%,rgba(239,232,218,.86) 72%,rgba(239,232,218,0));
   transform:translateY(102%);transition:transform .42s cubic-bezier(.2,.9,.25,1);text-align:center}
 .sheet.up{transform:translateY(0)}
-.rar{font-size:10.5px;letter-spacing:.22em;text-transform:uppercase;color:var(--ink3)}
-.nm{font-family:var(--serif);font-size:25px;margin:6px 0 2px;line-height:1.15;color:var(--ink)}
-.mu{font-size:11.5px;letter-spacing:.14em;text-transform:uppercase;color:#9A7B3E;margin-bottom:6px}
-.pm{font-family:var(--serif);font-style:italic;font-size:14px;color:var(--ink2);margin:0 0 17px;line-height:1.45}
+.rar{font-size:calc(10.5px*var(--ui,1));letter-spacing:.22em;text-transform:uppercase;color:var(--ink3)}
+.nm{font-family:var(--serif);font-size:calc(25px*var(--ui,1));margin:6px 0 2px;line-height:1.15;color:var(--ink)}
+.mu{font-size:calc(11.5px*var(--ui,1));letter-spacing:.14em;text-transform:uppercase;color:#9A7B3E;margin-bottom:6px}
+.pm{font-family:var(--serif);font-style:italic;font-size:calc(14.5px*var(--ui,1));color:var(--ink2);margin:0 0 17px;line-height:1.45}
 .btns{display:flex;gap:9px}
-button.act{flex:1;font:inherit;font-size:13.5px;font-weight:600;padding:13px 8px;border-radius:13px;
+button.act{flex:1;font:inherit;font-size:calc(13.5px*var(--ui,1));font-weight:600;padding:14px 8px;border-radius:13px;
   border:1px solid var(--line);background:rgba(255,253,248,.7);color:var(--ink);cursor:pointer;transition:.16s}
 button.act:active{transform:scale(.97)}
 button.act.hi{background:var(--ink);color:#F3EDE1;border-color:var(--ink)}
@@ -72,13 +75,14 @@ button.act.hi{background:var(--ink);color:#F3EDE1;border-color:var(--ink)}
 #intro{position:absolute;inset:0;background:radial-gradient(120% 90% at 50% 20%,#EFE8DA,#D3C7B2 76%);
   display:flex;flex-direction:column;align-items:center;justify-content:center;
   text-align:center;padding:34px;gap:14px;transition:opacity .6s;color:var(--ink)}
-#intro h1{font-family:var(--serif);font-weight:500;font-size:39px;margin:0;line-height:1.08;letter-spacing:.01em}
+#intro h1{font-family:var(--serif);font-weight:500;font-size:calc(38px*var(--ui,1));margin:0;line-height:1.08;letter-spacing:.01em}
 #intro h1 span{display:block;font-size:13px;letter-spacing:.34em;text-transform:uppercase;
   color:var(--ink3);margin-bottom:14px;font-family:var(--sans)}
 #intro p{font-family:var(--serif);font-style:italic;color:var(--ink2);max-width:19em;
-  line-height:1.6;font-size:15px;margin:2px 0 12px}
-#intro button{font:inherit;font-size:14px;font-weight:650;padding:14px 30px;border-radius:999px;
+  line-height:1.6;font-size:calc(15px*var(--ui,1));margin:2px 0 12px}
+#intro button{font:inherit;font-size:calc(14.5px*var(--ui,1));font-weight:650;padding:14px 30px;border-radius:999px;
   border:0;background:var(--ink);color:#F3EDE1;cursor:pointer}
+body.sheeting #tabs{opacity:0;pointer-events:none}
 .gone{opacity:0;pointer-events:none!important}
 @media (prefers-reduced-motion:reduce){*{transition-duration:.01ms!important}}
 </style>
@@ -91,12 +95,12 @@ button.act.hi{background:var(--ink);color:#F3EDE1;border-color:var(--ink)}
       <div class="pill" id="pMail">✉ <b>0</b></div>
       <div class="pill" id="pHarm">❀ ×1.0</div>
       <div class="pill" id="pStreak">✿ 1</div>
-      <div id="tabs">
-        <button data-s="table" class="on">Table</button>
-        <button data-s="shelf">Sill</button>
-        <button data-s="book">Book</button>
-      </div>
     </div>
+    <nav id="tabs">
+      <button data-s="table" class="on">Table</button>
+      <button data-s="shelf">Sill</button>
+      <button data-s="book">Book</button>
+    </nav>
     <div id="hint"></div>
     <div id="toast"></div>
     <div class="sheet" id="sheet">
@@ -145,22 +149,32 @@ const CFG = {
    through mor() rather than being authored freely.
    ============================================================ */
 const MOR = {
-  paper : '#E4DACA', card  : '#EFE8DA',
-  wall  : '#CFCABE', wallLo: '#BAB4A6',
-  wood  : '#B2996F', woodLo: '#9C845D', woodDk: '#87714E',
-  frame : '#A08C6C', sill  : '#B6A180',
-  ink   : '#4A4238', ink2  : '#6E6455', ink3  : '#958974',
-  line  : 'rgba(74,66,56,.30)',
-  soft  : 'rgba(74,66,56,.13)',
-  ochre : '#BE9F63', clay: '#B08C74', sage: '#8D9C88',
-  glass : '#CBD3D1', bone: '#EDE4D4', kraft: '#D6C7AA', pewter: '#A9ABA4',
+  paper : '#F1ECE0', card  : '#F8F4EA',
+  wall  : '#E9E5D9', wallLo: '#D7D2C3',
+  wood  : '#D2BD9A', woodLo: '#BFA883', woodDk: '#A88F6B',
+  frame : '#C1AC8B', sill  : '#D0BB97',
+  ink   : '#453E34', ink2  : '#6A6052', ink3  : '#948873',
+  line  : 'rgba(69,62,52,.28)',
+  soft  : 'rgba(69,62,52,.12)',
+  ochre : '#C4A464', clay: '#BC9479', sage: '#96A691',
+  glass : '#D8DEDA', bone: '#F4EDDF', kraft: '#E2D5B9', pewter: '#BCBDB5',
 };
 // Saturation and lightness envelopes. Nothing in the game is allowed
 // out of these, which is what keeps the whole screen in one key.
-const MOR_S = [5, 30], MOR_L = [38, 89];
+/* GROUND — the room. Near-neutral and high-value, so it never competes. */
+const G_S = [0, 15], G_L = [48, 95];
 function mor(h, sat, lit, a = 1){
-  const l = clamp(lit, MOR_L[0], MOR_L[1]);
-  const s = clamp(sat * (0.45 + 0.55*l/100), MOR_S[0], MOR_S[1]);
+  const l = clamp(lit, G_L[0], G_L[1]);
+  const s = clamp(sat * (0.6 + 0.4*l/100), G_S[0], G_S[1]);
+  return hsl(h, s, l, a);
+}
+/* FIGURE — the flowers. Still Morandi, but allowed more chroma and a higher
+   floor than the room, which is what buys separation without loudness. The
+   chroma-falls-with-value rule stays, only gentler. */
+const F_S = [11, 38], F_L = [46, 90];
+function pet(h, sat, lit, a = 1){
+  const l = clamp(lit, F_L[0], F_L[1]);
+  const s = clamp(sat * (0.62 + 0.38*l/100), F_S[0], F_S[1]);
   return hsl(h, s, l, a);
 }
 
@@ -226,9 +240,9 @@ function ptSegDist(p, a, b){
    CONTENT
    ============================================================ */
 const RARITY = [
-  {id:'common',    name:'Common',    w:66, col:'#cfc4b4', mut:0.00, notes:3},
-  {id:'uncommon',  name:'Uncommon',  w:23, col:'#8fd0a8', mut:0.06, notes:4},
-  {id:'rare',      name:'Rare',      w: 9, col:'#7fc4e8', mut:0.20, notes:6},
+  {id:'common',    name:'Common',    w:66, col:'#9A8E79', mut:0.00, notes:3},
+  {id:'uncommon',  name:'Uncommon',  w:23, col:'#778C71', mut:0.06, notes:4},
+  {id:'rare',      name:'Rare',      w: 9, col:'#6C819A', mut:0.20, notes:6},
   {id:'legendary', name:'Legendary', w: 2, col:'#9A7B3E', mut:0.48, notes:9},
 ];
 const RA = {}; RARITY.forEach((r,i)=>{ r.idx=i; RA[r.id]=r; });
@@ -266,11 +280,11 @@ const SPECIES = [
 const SP = {}; SPECIES.forEach(s => SP[s.id]=s);
 
 const VARIANTS = [
-  {id:'dawn', name:'Dawn',  target:  0, mix:0.00, ds:  1, dl:  5},
-  {id:'ink',  name:'Ink',   target:232, mix:0.36, ds:  5, dl:-17},
-  {id:'ember',name:'Ember', target: 20, mix:0.46, ds:  8, dl: -5},
-  {id:'frost',name:'Frost', target:196, mix:0.44, ds: -7, dl: 10},
-  {id:'moss', name:'Moss',  target: 96, mix:0.44, ds: -3, dl: -3},
+  {id:'dawn', name:'Dawn',  alt:'Plain',   target:  0, mix:0.00, ds:  1, dl:  5},
+  {id:'ink',  name:'Ink',   alt:'Inked',   target:232, mix:0.36, ds:  5, dl:-17},
+  {id:'ember',name:'Ember', alt:'Kindled', target: 20, mix:0.46, ds:  8, dl: -5},
+  {id:'frost',name:'Frost', alt:'Frosted', target:196, mix:0.44, ds: -7, dl: 10},
+  {id:'moss', name:'Moss',  alt:'Mossed',  target: 96, mix:0.44, ds: -3, dl: -3},
 ];
 // shortest way round the wheel, so blends never swing through the wrong colours
 function blendHue(h, target, mix){
@@ -360,39 +374,40 @@ const STORY_END = 'The parcels keep coming. You have stopped wondering who, and 
    would fail for a colour-blind player, so each glaze also has a distinct
    relief, and the two always travel together. */
 const GLAZES = [
-  {body:'#B08C74', rim:'#8E6B55', mark:'band'},    // terracotta
-  {body:'#8D9C88', rim:'#6E7D69', mark:'dots'},    // sage
-  {body:'#8C99A8', rim:'#6D7A88', mark:'stripe'},  // slate
-  {body:'#BE9F63', rim:'#987F4D', mark:'cross'},   // ochre
+  {body:'#C4977C', rim:'#9E735A', mark:'band',   name:'terracotta'},
+  {body:'#9BAE94', rim:'#748769', mark:'dots',   name:'sage'},
+  {body:'#98A8BA', rim:'#71829A', mark:'stripe', name:'slate'},
+  {body:'#D2B478', rim:'#A88B52', mark:'cross',  name:'ochre'},
 ];
-const POT_PLAIN = {body:'#BFAC90', rim:'#A28F74', mark:'none'};
+const POT_PLAIN = {body:'#D5C5A8', rim:'#B5A384', mark:'none', name:'plain'};
 
-function drawPot(ctx, x, y, glazeIdx){
+function potPath(ctx, x, y, k){
+  ctx.beginPath();
+  ctx.moveTo(x - 13*k, y - 10*k); ctx.lineTo(x + 13*k, y - 10*k);
+  ctx.lineTo(x +  9*k, y +  6*k); ctx.lineTo(x -  9*k, y +  6*k);
+  ctx.closePath();
+}
+function drawPot(ctx, x, y, glazeIdx, k = 1){
   const g = glazeIdx >= 0 ? GLAZES[glazeIdx] : POT_PLAIN;
   ctx.save();
-  ctx.fillStyle = g.body;
-  ctx.beginPath();
-  ctx.moveTo(x - 13, y - 10); ctx.lineTo(x + 13, y - 10);
-  ctx.lineTo(x + 9, y + 6);   ctx.lineTo(x - 9, y + 6);
-  ctx.closePath(); ctx.fill();
-  ctx.fillStyle = g.rim; rr(ctx, x - 13.5, y - 11, 27, 5, 1.5); ctx.fill();
-  ctx.fillStyle = 'rgba(255,252,244,.2)'; ctx.fillRect(x - 11, y - 9.5, 22, 1.6);
+  ctx.fillStyle = 'rgba(112,96,76,.13)';
+  ctx.beginPath(); ctx.ellipse(x, y + 7*k, 12*k, 2.6*k, 0, 0, TAU); ctx.fill();
+  ctx.fillStyle = g.body; potPath(ctx, x, y, k); ctx.fill();
+  ctx.fillStyle = g.rim; rr(ctx, x - 13.5*k, y - 11*k, 27*k, 5*k, 1.6*k); ctx.fill();
+  ctx.fillStyle = 'rgba(255,253,247,.24)'; ctx.fillRect(x - 11*k, y - 9.6*k, 22*k, 1.7*k);
   ctx.fillStyle = g.rim;
   if (g.mark === 'band'){
-    ctx.fillRect(x - 10.5, y - 2, 21, 2.6);
+    ctx.fillRect(x - 10.5*k, y - 2*k, 21*k, 2.6*k);
   } else if (g.mark === 'dots'){
-    for (let i=-1;i<=1;i++){ ctx.beginPath(); ctx.arc(x + i*6.5, y - 0.5, 1.8, 0, TAU); ctx.fill(); }
+    for (let i=-1;i<=1;i++){ ctx.beginPath(); ctx.arc(x + i*6.5*k, y - 0.5*k, 1.9*k, 0, TAU); ctx.fill(); }
   } else if (g.mark === 'stripe'){
-    for (let i=-1;i<=1;i++) ctx.fillRect(x + i*6.5 - 0.9, y - 6, 1.8, 10);
+    for (let i=-1;i<=1;i++) ctx.fillRect(x + i*6.5*k - 0.95*k, y - 6*k, 1.9*k, 10*k);
   } else if (g.mark === 'cross'){
-    ctx.save(); ctx.translate(x, y - 1); ctx.rotate(Math.PI/4);
-    ctx.fillRect(-6, -1.1, 12, 2.2); ctx.fillRect(-1.1, -6, 2.2, 12); ctx.restore();
+    ctx.save(); ctx.translate(x, y - k); ctx.rotate(Math.PI/4);
+    ctx.fillRect(-6*k, -1.15*k, 12*k, 2.3*k); ctx.fillRect(-1.15*k, -6*k, 2.3*k, 12*k); ctx.restore();
   }
-  ctx.strokeStyle = 'rgba(86,75,60,.34)'; ctx.lineWidth = 1.1;
-  ctx.beginPath();
-  ctx.moveTo(x - 13, y - 10); ctx.lineTo(x + 13, y - 10);
-  ctx.lineTo(x + 9, y + 6);   ctx.lineTo(x - 9, y + 6);
-  ctx.closePath(); ctx.stroke();
+  ctx.strokeStyle = 'rgba(78,68,55,.32)'; ctx.lineWidth = 1.2;
+  potPath(ctx, x, y, k); ctx.stroke();
   ctx.restore();
 }
 
@@ -519,24 +534,24 @@ function phenotype(g){
   const wid = Math.min(sh.wid * sp.size, (TAU/n) * 0.62);
   const pale = lit > 58;
   const cen  = sp.center === 'beads'
-      ? [mor(hue, sat + 8, lit - 26), mor(hue, sat + 12, lit - 12)]
+      ? [pet(hue, sat + 8, lit - 24), pet(hue, sat + 12, lit - 10)]
       : (sp.center === 'ring' || sp.center === 'star')
-      ? [mor(hue, sat*0.5, pale ? 78 : 73), mor(hue + 16, sat*0.4, pale ? 86 : 83)]
-      : [mor(42, 30, pale ? 56 : 50), mor(46, 34, pale ? 72 : 66)];
+      ? [pet(hue, sat*0.5, pale ? 80 : 75), pet(hue + 16, sat*0.4, pale ? 88 : 85)]
+      : [pet(42, 34, pale ? 60 : 54), pet(46, 38, pale ? 76 : 70)];
 
   const ph = {
     ...sh, n, wid, mu: g.mu, ra: g.ra, sp: g.sp, jit,
     len : sh.len * sp.size,
-    cA   : mor(hue, sat, lit),
-    cB   : mor(hue + 8, sat*0.95, lit - 13),
-    cEdge: mor(hue - 6, sat*0.85, lit + 9),
+    cA   : pet(hue, sat, lit),
+    cB   : pet(hue + 8, sat*0.95, lit - 12),
+    cEdge: pet(hue - 6, sat*0.8, lit + 11),
     // outlines are pencil, not a darker version of the fill — this is most of
     // what separates a hand-drawn look from a vector one
-    cLine: 'rgba(86,75,60,.42)',
-    cVein: mor(hue, sat*0.7, lit - 9, 0.5),
+    cLine: 'rgba(78,68,55,.4)',
+    cVein: pet(hue, sat*0.7, lit - 8, 0.45),
     cCen : cen[0],
     cCen2: cen[1],
-    stem : mor(lerp(88, 116, r()), lerp(13, 20, r()), lerp(44, 53, r())),
+    stem : pet(lerp(92, 122, r()), lerp(17, 25, r()), lerp(50, 60, r())),
     center: sp.center,
     bend : r()*2 - 1,
     phase: r()*TAU,
@@ -546,7 +561,12 @@ function phenotype(g){
   return ph;
 }
 function flowerName(g){
-  return (g.va === 'dawn' ? '' : VA[g.va].name + ' ') + SP[g.sp].name;
+  const sp = SP[g.sp].name, va = VA[g.va].name;
+  if (g.va === 'dawn') return sp;
+  // "Ember" + "Ember Cup" would read "Ember Ember Cup"; fall back to the
+  // colourway's other adjective so the two still have different names
+  if (new RegExp('\\b' + va + '\\b', 'i').test(sp)) return VA[g.va].alt + ' ' + sp;
+  return va + ' ' + sp;
 }
 
 function petalPath(ctx, L, Wd, curl, frill, split, sharp, j){
@@ -1024,7 +1044,7 @@ const GES = {
   },
 
   snip: {
-    hint: 'Swipe <i>across</i> the twine to cut it',
+    hint: 'Swipe <i>across</i> the twine',
     init(Ly, r, box){
       const n = 1 + Math.floor(r()*2.4);
       Ly.cords = [];
@@ -1074,7 +1094,7 @@ const GES = {
   },
 
   pop: {
-    hint: 'Pop <i>every bubble</i> — tap or drag across them',
+    hint: 'Pop <i>every bubble</i>',
     init(Ly, r, box){
       Ly.bs = [];
       const cols = 4, rows = 5, iw = box.w*0.74, ih = box.h*0.7;
@@ -1124,7 +1144,7 @@ const GES = {
   },
 
   unwind: {
-    hint: 'Wind the thread off — <i>drag in circles</i>',
+    hint: 'Wind it off — <i>drag in circles</i>',
     init(Ly, r, box){ Ly.c = {x:box.cx, y:box.cy}; Ly.turns = 2.5; Ly.sum = 0; Ly.last = null; Ly.blip = 0; Ly.coil = 0; },
     down(Ly, p){ Ly.last = Math.atan2(p.y - Ly.c.y, p.x - Ly.c.x); },
     move(Ly, p){
@@ -1241,6 +1261,23 @@ const GES = {
   },
 };
 
+function inspectBook(p){
+  const h = bookHit(p);
+  if (!h) return;
+  if (h.kind === 'species'){
+    const b = S.book[h.sp.id];
+    if (!b){ note(h.sp.name.replace(/./g, '·') + ' — not found yet. Keep opening parcels.', 3000); return; }
+    const hues = VARIANTS.filter(v => b.v[v.id]).map(v => v.name);
+    note('<b>' + h.sp.name + '</b><br>' + SP[h.sp.id].poem + '<br>' +
+         hues.length + '/' + VARIANTS.length + ' colourways: ' + hues.join(', '), 4600);
+  } else if (h.kind === 'decor'){
+    note(S.decorFound[h.d.id] ? '<b>' + h.d.name + '</b><br>' + h.d.note
+                              : 'An ornament you have not been sent yet.', 4000);
+  } else {
+    note('<b>' + CU[h.id].name + '</b>', 2400);
+  }
+}
+
 /* ============================================================
    CANVAS + LAYOUT
    ============================================================ */
@@ -1253,6 +1290,8 @@ function resize(){
   cv.width = Math.round(W*DPR); cv.height = Math.round(H*DPR);
   cv.style.width = W + 'px'; cv.style.height = H + 'px';
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  UI.s = clamp(Math.min(W/390, H/760), 0.9, 1.3) * 1.18;
+  document.documentElement.style.setProperty('--ui', UI.s.toFixed(3));
   if (V.mode === 'unwrap') relayout();
 }
 function relayout(){
@@ -1424,7 +1463,46 @@ function updateHUD(){
   $('#pMail').innerHTML = '✉ <b>' + S.mail + '</b>';
   $('#pHarm').textContent = '❀ ×' + hm.mult.toFixed(2);
   $('#pStreak').textContent = '✿ ' + S.streak;
+  $('#pMail').title = 'Parcels waiting';
+  $('#pHarm').title = 'How fast parcels arrive';
+  $('#pStreak').title = 'Days in a row';
 }
+function mmss(ms){
+  const m = Math.floor(ms/60000), sec = Math.floor(ms/1000) % 60;
+  return m + ':' + String(sec).padStart(2,'0');
+}
+/* Nothing on screen should be a mystery you have to guess at. */
+function explainMail(){
+  if (S.mail >= CFG.parcelCap)
+    note('The table is full: ' + S.mail + ' parcels. Nothing more accrues until you open some — ' +
+         'nothing is lost by leaving them.', 4200);
+  else
+    note(S.mail === 0
+      ? 'No parcels yet. The next arrives in ' + mmss(nextIn()) + '.'
+      : S.mail + (S.mail === 1 ? ' parcel' : ' parcels') + ' waiting. The next arrives in ' +
+        mmss(nextIn()) + '.', 3600);
+}
+function explainHarmony(){
+  const hm = harmony();
+  if (hm.mult <= 1.0001){
+    note('Parcels arrive every ' + Math.round(CFG.parcelIntervalMs/1000) + 's. ' +
+         'Stand flowers that agree next to each other on the sill and they arrive faster.', 4400);
+    return;
+  }
+  const parts = BONDS.filter(b => hm.tally[b.id]).map(b => hm.tally[b.id] + ' ' + b.name.toLowerCase());
+  if (hm.shelves) parts.push(hm.shelves + (hm.shelves === 1 ? ' shelf' : ' shelves') + ' in accord');
+  if (hm.full) parts.push('a full sill');
+  if (hm.decorOn) parts.push(hm.decorOn + ' on the ledge');
+  note('Parcels arrive ×' + hm.mult.toFixed(2) + ' faster — ' + parts.join(', ') +
+       '. That is one every ' + mmss(CFG.parcelIntervalMs/hm.mult) + '.', 4600);
+}
+function explainStreak(){
+  note(S.streak + (S.streak === 1 ? ' day' : ' days') + ' in a row. A day missed only wilts it ' +
+       '— it halves, it never resets to nothing.', 4000);
+}
+$('#pMail').onclick   = () => { Snd.resume(); explainMail(); };
+$('#pHarm').onclick   = () => { Snd.resume(); explainHarmony(); };
+$('#pStreak').onclick = () => { Snd.resume(); explainStreak(); };
 function setScreen(s){
   V.screen = s;
   document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.s === s));
@@ -1439,8 +1517,8 @@ document.querySelectorAll('#tabs button').forEach(b => b.onclick = () => {
    OPENING A PARCEL
    ============================================================ */
 function layoutBox(){
-  const s = Math.min(W*0.62, 236);
-  return { cx: W/2, cy: H*0.5, w: s, h: s };
+  const s = Math.min(W*0.66, 268);
+  return { cx: W/2, cy: H*0.62, w: s, h: s };
 }
 function openParcel(){
   if (S.mail <= 0) return;
@@ -1554,9 +1632,9 @@ function showSheet(){
     $('#bBook').textContent = 'Into the book';
     $('#bBook').classList.remove('hi');
   }
-  elSheet.classList.add('up');
+  elSheet.classList.add('up'); document.body.classList.add('sheeting');
 }
-function hideSheet(){ elSheet.classList.remove('up'); }
+function hideSheet(){ elSheet.classList.remove('up'); document.body.classList.remove('sheeting'); }
 
 $('#bBook').onclick = () => {
   hideSheet(); V.mode='idle';
@@ -1623,7 +1701,11 @@ cv.addEventListener('pointerdown', e => {
   try { cv.setPointerCapture(e.pointerId); } catch(err){}
 
   if (V.screen === 'table'){
-    if (V.mode === 'idle'){ if (S.mail > 0) openParcel(); return; }
+    if (V.mode === 'idle'){
+      if (S.mail > 0) openParcel();
+      else explainMail();
+      return;
+    }
     if (V.mode === 'unwrap'){ const L = activeLayer(); if (L) GES[L.kind].down(L, p, V.box); return; }
     return;
   }
@@ -1631,12 +1713,18 @@ cv.addEventListener('pointerdown', e => {
     if (V.placing === 'decor'){ const d = ledgeAt(p); if (d >= 0) placeDecor(d); return; }
     if (V.placing === 'flower'){ const i = slotAt(p); if (i >= 0) placeAt(i); return; }
     const i = slotAt(p);
-    if (i >= 0 && S.sill[i]){ V.grab = {kind:'flower', idx:i, x:p.x, y:p.y, x0:p.x, y0:p.y, moved:false}; return; }
+    if (i >= 0){
+      if (S.sill[i]){ V.grab = {kind:'flower', idx:i, x:p.x, y:p.y, x0:p.x, y0:p.y, moved:false}; return; }
+      note('An empty pot. Open a parcel, then put the flower here.', 2800); return;
+    }
     const d = ledgeAt(p);
-    if (d >= 0 && S.decor[d]){ V.grab = {kind:'decor', idx:d, x:p.x, y:p.y, x0:p.x, y0:p.y, moved:false}; return; }
+    if (d >= 0){
+      if (S.decor[d]){ V.grab = {kind:'decor', idx:d, x:p.x, y:p.y, x0:p.x, y0:p.y, moved:false}; return; }
+      note('A space on the ledge, for something that is not a flower.', 2800); return;
+    }
     return;
   }
-  if (V.screen === 'book'){ V.bookDrag = p.y; V.bookDrag0 = V.bookScroll; }
+  if (V.screen === 'book'){ V.bookDrag = p.y; V.bookDrag0 = V.bookScroll; V.bookMoved = false; }
 });
 cv.addEventListener('pointermove', e => {
   const p = pos(e);
@@ -1651,6 +1739,7 @@ cv.addEventListener('pointermove', e => {
     // a small threshold keeps a tap an inspection, not a fumbled drag
     if (!V.grab.moved && Math.hypot(p.x - V.grab.x0, p.y - V.grab.y0) > 8) V.grab.moved = true;
   } else if (V.screen === 'book' && V.bookDrag !== null){
+    if (Math.abs(p.y - V.bookDrag) > 6) V.bookMoved = true;
     V.bookScroll = V.bookDrag0 - (p.y - V.bookDrag);
   }
   input.prev = input.p; input.p = p;
@@ -1660,6 +1749,7 @@ function endPointer(e){
   input.down = false;
   const L = (V.screen === 'table' && V.mode === 'unwrap') ? activeLayer() : null;
   if (L) GES[L.kind].up(L, input.p, V.box);
+  if (V.screen === 'book' && V.bookDrag !== null && !V.bookMoved) inspectBook(input.p);
   V.bookDrag = null;
 
   const gb = V.grab; V.grab = null;
@@ -1691,13 +1781,23 @@ function endPointer(e){
 cv.addEventListener('pointerup', endPointer);
 cv.addEventListener('pointercancel', endPointer);
 cv.addEventListener('lostpointercapture', endPointer);
+// Drag-scrolling alone left the foot of the page unreachable by the gesture a
+// desktop player actually reaches for.
+cv.addEventListener('wheel', e => {
+  if (V.screen !== 'book') return;
+  V.bookScroll += e.deltaMode === 1 ? e.deltaY * 18 : e.deltaY;
+  e.preventDefault();
+}, { passive: false });
 cv.addEventListener('contextmenu', e => e.preventDefault());
 document.addEventListener('visibilitychange', () => { if (document.hidden) save(); else { dayCheck(); accrue(); updateHUD(); } });
 
+/* Every canvas type size is a design size multiplied by UI.s, so legibility is
+   one knob rather than forty literals. */
+const UI = { s: 1 };
 const F_SERIF = "'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, serif";
 const F_SANS  = "ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif";
 function wrapText(text, maxW, size, font){
-  ctx.font = size + 'px ' + font;
+  ctx.font = (size*UI.s).toFixed(2) + 'px ' + font;
   const words = String(text).split(' '), lines = [];
   let line = '';
   for (const w of words){
@@ -1709,7 +1809,7 @@ function wrapText(text, maxW, size, font){
   return lines;
 }
 function txt(s, x, y, size, col, font = F_SANS, align='center', weight=''){
-  ctx.font = (weight ? weight + ' ' : '') + size + 'px ' + font;
+  ctx.font = (weight ? weight + ' ' : '') + (size*UI.s).toFixed(2) + 'px ' + font;
   ctx.fillStyle = col; ctx.textAlign = align; ctx.textBaseline = 'alphabetic';
   ctx.fillText(s, x, y);
 }
@@ -1719,11 +1819,11 @@ function txt(s, x, y, size, col, font = F_SANS, align='center', weight=''){
    ============================================================ */
 function skyColors(){
   const h = new Date().getHours();
-  if (h < 5)  return ['#A2A9AF','#BDC0BC','night'];
-  if (h < 8)  return ['#D6C6BA','#E8DFD1','dawn'];
-  if (h < 17) return ['#CFD8DA','#E6E8E0','day'];
-  if (h < 20) return ['#DCC7B2','#CBC4BE','dusk'];
-  return ['#A5ACB2','#C0C1BD','night'];
+  if (h < 5)  return ['#B4BDC4','#D3D5D1','night'];
+  if (h < 8)  return ['#E6D3C4','#F6F0E4','dawn'];
+  if (h < 17) return ['#D5E1E4','#F1F2EA','day'];
+  if (h < 20) return ['#EBD4BA','#DFD9D2','dusk'];
+  return ['#B8C0C6','#D6D7D2','night'];
 }
 function drawBackdrop(kind){
   const [s1, s2, when] = skyColors();
@@ -1735,9 +1835,9 @@ function drawBackdrop(kind){
   ctx.fillStyle = 'rgba(74,66,56,.016)';
   for (let x = 0; x < W; x += 38) ctx.fillRect(x, 0, 18, H);
 
-  const wx = W*0.1, ww = W*0.8,
-        wy = kind === 'shelf' ? H*0.155 : H*0.075,
-        wh = kind === 'shelf' ? H*0.58  : H*0.38;
+  const wx = kind === 'shelf' ? W*0.07 : W*0.12, ww = kind === 'shelf' ? W*0.86 : W*0.76,
+        wy = kind === 'shelf' ? H*0.155 : H*0.072,
+        wh = kind === 'shelf' ? H*0.55  : H*0.325;
 
   ctx.fillStyle = 'rgba(122,106,86,.14)';                 // frame shadow on the wall
   rr(ctx, wx - 7, wy - 5, ww + 14, wh + 20, 6); ctx.fill();
@@ -1781,17 +1881,18 @@ function drawBackdrop(kind){
     ctx.fillStyle = MOR.sill; rr(ctx, wx - 20, wy + wh + 8, ww + 40, 13, 3); ctx.fill();
     ctx.fillStyle = 'rgba(122,106,86,.16)'; ctx.fillRect(wx - 20, wy + wh + 21, ww + 40, 4);
 
-    const tg = ctx.createLinearGradient(0, H*0.57, 0, H);
+    const tg = ctx.createLinearGradient(0, H*0.5, 0, H);
     tg.addColorStop(0, MOR.wood); tg.addColorStop(1, MOR.woodDk);
-    ctx.fillStyle = tg; ctx.fillRect(0, H*0.585, W, H*0.415);
-    ctx.fillStyle = 'rgba(74,66,56,.16)'; ctx.fillRect(0, H*0.585, W, 1.5);
+    ctx.fillStyle = tg; ctx.fillRect(0, H*0.53, W, H*0.47);
+    ctx.fillStyle = 'rgba(69,62,52,.18)'; ctx.fillRect(0, H*0.53, W, 1.5);
     // the pool of light coming in through the window
-    ctx.fillStyle = 'rgba(255,248,230,.19)';
-    ctx.beginPath(); ctx.moveTo(W*0.2, H*0.585); ctx.lineTo(W*0.8, H*0.585);
-    ctx.lineTo(W*0.95, H); ctx.lineTo(W*0.05, H); ctx.closePath(); ctx.fill();
+    // a soft pool rather than a trapezoid — the straight edges read as a shape
+    const pool = ctx.createRadialGradient(W/2, H*0.56, W*0.06, W/2, H*0.62, W*0.78);
+    pool.addColorStop(0, 'rgba(255,251,238,.34)'); pool.addColorStop(1, 'rgba(255,251,238,0)');
+    ctx.fillStyle = pool; ctx.fillRect(0, H*0.53, W, H*0.47);
     ctx.strokeStyle = 'rgba(74,66,56,.05)'; ctx.lineWidth = 1;      // grain
     for (let i = 1; i < 5; i++){
-      const y = H*0.585 + H*0.415*i/5;
+      const y = H*0.53 + H*0.47*i/5;
       ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
     }
   }
@@ -1810,7 +1911,7 @@ function drawTable(){
     if (S.mail > 0){
       // up to three, laid out so each silhouette stays readable; the rest are counted
       const n = Math.min(S.mail, 3);
-      const spots = [ {dx:-58, dy:-10, s:74}, {dx: 58, dy: -7, s:76}, {dx:  0, dy: 10, s:92} ];
+      const spots = [ {dx:-70, dy:-12, s:88}, {dx: 70, dy: -8, s:90}, {dx:  0, dy: 12, s:110} ];
       const order = n === 1 ? [2] : n === 2 ? [0, 2] : [0, 1, 2];
       const look = ['crate', 'tin', 'crane'];          // dark, mid, pale
       order.forEach((sl, i) => {
@@ -1819,26 +1920,26 @@ function drawTable(){
         drawBody(ctx, P, { cx: W/2 + o.dx, cy: H*0.7 + o.dy, w: o.s, h: o.s }, {}, V.t);
       });
       if (S.specialPending){
-        const bx = W/2 + 66, by = H*0.62;
+        const bx = W/2 + 84, by = H*0.575;
         ctx.save(); ctx.translate(bx, by); ctx.rotate(-0.2);
-        ctx.fillStyle = MOR.ochre; rr(ctx, -30, -9, 60, 18, 4); ctx.fill();
-        txt('SPECIAL', 0, 5, 9, '#3A3024', F_SANS, 'center', '700');
+        ctx.fillStyle = MOR.ochre; rr(ctx, -36, -11, 72, 22, 5); ctx.fill();
+        txt('SPECIAL', 0, 5, 10.5, '#3A3024', F_SANS, 'center', '700');
         ctx.restore();
       }
-      txt(S.mail + (S.mail === 1 ? ' parcel' : ' parcels') + ' on the table', W/2, H*0.83, 15, MOR.ink, F_SERIF);
+      txt(S.mail + (S.mail === 1 ? ' parcel' : ' parcels') + ' on the table', W/2, H*0.825, 17, MOR.ink, F_SERIF);
       hint('Tap to open');
     } else {
       const ms = nextIn(), iv = CFG.parcelIntervalMs / harmony().mult;
-      const p = 1 - ms/iv, R = 40;
-      ctx.save(); ctx.translate(W/2, H*0.63);
-      ctx.strokeStyle = 'rgba(86,75,60,.16)'; ctx.lineWidth = 4;
+      const p = 1 - ms/iv, R = 54;
+      ctx.save(); ctx.translate(W/2, H*0.68);
+      ctx.strokeStyle = 'rgba(69,62,52,.15)'; ctx.lineWidth = 5;
       ctx.beginPath(); ctx.arc(0, 0, R, 0, TAU); ctx.stroke();
       ctx.strokeStyle = MOR.ochre; ctx.lineCap = 'round';
       ctx.beginPath(); ctx.arc(0, 0, R, -Math.PI/2, -Math.PI/2 + TAU*clamp(p,0,1)); ctx.stroke();
       const m = Math.floor(ms/60000), sc = Math.floor(ms/1000) % 60;
-      txt(m + ':' + String(sc).padStart(2,'0'), 0, 5, 15, MOR.ink, F_SERIF);
+      txt(m + ':' + String(sc).padStart(2,'0'), 0, 6, 18, MOR.ink, F_SERIF);
       ctx.restore();
-      txt('An empty table.', W/2, H*0.8, 15, MOR.ink3, F_SERIF);
+      txt('An empty table.', W/2, H*0.825, 17, MOR.ink3, F_SERIF);
       hint('The next parcel is on its way.');
     }
     return;
@@ -1855,7 +1956,7 @@ function drawTable(){
       if (l.p <= 0 && l !== L) continue;          // don't show wrapping you haven't reached
       GES[l.kind].draw(ctx, l, box, V.t, l === L);
     }
-    txt(V.P.name, W/2, H*0.79, 14, MOR.ink2, F_SERIF);
+    txt(V.P.name, W/2, H*0.83, 15.5, MOR.ink2, F_SERIF);
     const step = V.layers.filter(l => l.p >= 1).length + 1;
     hint((V.layers.length > 1 ? step + '/' + V.layers.length + ' &nbsp;·&nbsp; ' : '') + (L ? GES[L.kind].hint : ''));
     return;
@@ -1872,20 +1973,20 @@ function drawTable(){
   }
   const e = 1 - Math.pow(1 - V.bloom, 3);
   if (V.story){
-    drawCurio(ctx, V.story.id, box.cx, box.cy, 46*e);
+    drawCurio(ctx, V.story.id, box.cx, box.cy - H*0.02, 54*e);
   } else if (V.decor){
-    drawDecor(ctx, V.decor.id, box.cx, box.cy, 44*e);
+    drawDecor(ctx, V.decor.id, box.cx, box.cy - H*0.02, 52*e);
   } else {
     const ph = phenotype(V.genome);
-    const R = Math.min(W*0.245, 96);
-    drawFlower(ctx, ph, box.cx, box.cy - H*0.02, R*(0.25 + 0.75*e), V.bloom, V.t,
-               { stemLen: Math.min(R*2.6, H*0.2) });
+    const R = Math.min(W*0.27, 112);
+    drawFlower(ctx, ph, box.cx, box.cy - H*0.055, R*(0.25 + 0.75*e), V.bloom, V.t,
+               { stemLen: Math.min(R*2.4, H*0.19) });
     if (V.genome.ra === 'legendary' || V.genome.ra === 'rare'){
       ctx.save();
       for (let i=0;i<7;i++){
         const a = V.t*0.6 + i/7*TAU, rad = R*(1.35 + Math.sin(V.t*2 + i)*0.1);
         ctx.fillStyle = `rgba(152,124,62,${0.26 + Math.sin(V.t*3 + i)*0.2})`;
-        ctx.beginPath(); ctx.arc(box.cx + Math.cos(a)*rad, box.cy - H*0.02 + Math.sin(a)*rad*0.8, 2.4, 0, TAU); ctx.fill();
+        ctx.beginPath(); ctx.arc(box.cx + Math.cos(a)*rad, box.cy - H*0.055 + Math.sin(a)*rad*0.8, 2.8, 0, TAU); ctx.fill();
       }
       ctx.restore();
     }
@@ -1903,18 +2004,18 @@ function drawTable(){
    SILL SCREEN
    ============================================================ */
 function shelfGeom(){
-  return { x0: W*0.22, dx: W*0.28, y0: H*0.345, dy: H*0.158,
+  return { x0: W*0.21, dx: W*0.29, y0: H*0.335, dy: H*0.16,
            slot(i){ return { x: this.x0 + this.dx*(i%3), y: this.y0 + this.dy*Math.floor(i/3) }; } };
 }
 function ledgeGeom(){
-  return { y: H*0.755, x0: W*0.28, dx: W*0.22,
+  return { y: H*0.765, x0: W*0.27, dx: W*0.23,
            slot(i){ return { x: this.x0 + this.dx*i, y: this.y }; } };
 }
 function ledgeAt(p){
   const g = ledgeGeom();
   for (let i=0;i<3;i++){
     const s = g.slot(i);
-    if (Math.abs(p.x - s.x) < g.dx*0.46 && p.y > s.y - 34 && p.y < s.y + 16) return i;
+    if (Math.abs(p.x - s.x) < g.dx*0.46 && p.y > s.y - 40 && p.y < s.y + 14) return i;
   }
   return -1;
 }
@@ -1945,18 +2046,15 @@ function drawShelf(){
     const s = g.slot(i), fl = S.sill[i];
     const lifted = grab && grab.kind === 'flower' && grab.idx === i;
     if (fl && !lifted){
-      drawFlower(ctx, phenotype(fl), s.x, s.y - g.dy*0.5, Math.min(g.dx*0.3, 25), 1, V.t + i,
-                 { stemLen: g.dy*0.46, sway: 0.6 });
-      drawPot(ctx, s.x, s.y, hm.glazeOf[i]);
+      drawFlower(ctx, phenotype(fl), s.x, s.y - g.dy*0.52, Math.min(g.dx*0.34, 35), 1, V.t + i,
+                 { stemLen: g.dy*0.44, sway: 0.6 });
+      drawPot(ctx, s.x, s.y, hm.glazeOf[i], 1.35);
     } else {
       const live = V.placing === 'flower' || lifted || hoverSlot === i;
       ctx.strokeStyle = live ? `rgba(152,124,62,${0.6 + Math.sin(V.t*4 + i)*0.28})`
                              : 'rgba(86,75,60,.26)';
-      ctx.lineWidth = hoverSlot === i ? 2.4 : 1.6; ctx.setLineDash([4,4]);
-      ctx.beginPath();
-      ctx.moveTo(s.x - 13, s.y - 10); ctx.lineTo(s.x + 13, s.y - 10);
-      ctx.lineTo(s.x + 9, s.y + 6);   ctx.lineTo(s.x - 9, s.y + 6);
-      ctx.closePath(); ctx.stroke();
+      ctx.lineWidth = hoverSlot === i ? 2.6 : 1.8; ctx.setLineDash([5,5]);
+      potPath(ctx, s.x, s.y, 1.35); ctx.stroke();
       ctx.setLineDash([]);
     }
   }
@@ -1966,26 +2064,26 @@ function drawShelf(){
     if (grab && (grab.idx === bd.i || grab.idx === bd.j)) continue;
     const s1 = g.slot(bd.i), s2 = g.slot(bd.j);
     const col = GLAZES[hm.glazeOf[bd.i] >= 0 ? hm.glazeOf[bd.i] : 0].rim;
-    if (bd.vertical) bondGlyph(ctx, BD[bd.tier].glyph, s1.x, s1.y + 10.5, col, 4.4);
-    else             bondGlyph(ctx, BD[bd.tier].glyph, (s1.x + s2.x)/2, s1.y - 2, col, 5);
+    if (bd.vertical) bondGlyph(ctx, BD[bd.tier].glyph, s1.x, s1.y + 14, col, 6);
+    else             bondGlyph(ctx, BD[bd.tier].glyph, (s1.x + s2.x)/2, s1.y - 4, col, 6.6);
   }
 
   // the window ledge, for things that are not flowers
-  const ly = lg.y + 8;
-  ctx.fillStyle = 'rgba(112,96,76,.18)'; ctx.fillRect(W*0.1, ly + 11, W*0.8, 5);
-  ctx.fillStyle = MOR.sill; rr(ctx, W*0.1, ly, W*0.8, 11, 3); ctx.fill();
-  ctx.fillStyle = 'rgba(255,252,244,.26)'; rr(ctx, W*0.1, ly, W*0.8, 3.5, 1.5); ctx.fill();
+  const ly = lg.y;
+  ctx.fillStyle = 'rgba(112,96,76,.16)'; ctx.fillRect(W*0.08, ly + 13, W*0.84, 6);
+  ctx.fillStyle = MOR.sill; rr(ctx, W*0.08, ly, W*0.84, 13, 3.5); ctx.fill();
+  ctx.fillStyle = 'rgba(255,253,247,.3)'; rr(ctx, W*0.08, ly, W*0.84, 4, 2); ctx.fill();
   for (let i=0;i<3;i++){
     const s = lg.slot(i), id = S.decor[i];
     const lifted = grab && grab.kind === 'decor' && grab.idx === i;
     if (id && !lifted){
-      drawDecor(ctx, id, s.x, s.y - 4, 15);
+      drawDecor(ctx, id, s.x, s.y - 12, 21);
     } else {
       const live = V.placing === 'decor' || lifted || hoverLedge === i;
       ctx.strokeStyle = live ? `rgba(152,124,62,${0.6 + Math.sin(V.t*4 + i)*0.28})`
                              : 'rgba(86,75,60,.2)';
-      ctx.lineWidth = hoverLedge === i ? 2.4 : 1.5; ctx.setLineDash([3,4]);
-      ctx.beginPath(); ctx.arc(s.x, s.y - 5, 14, 0, TAU); ctx.stroke();
+      ctx.lineWidth = hoverLedge === i ? 2.6 : 1.7; ctx.setLineDash([4,5]);
+      ctx.beginPath(); ctx.arc(s.x, s.y - 12, 19, 0, TAU); ctx.stroke();
       ctx.setLineDash([]);
     }
   }
@@ -1996,144 +2094,186 @@ function drawShelf(){
     ctx.shadowColor = 'rgba(90,78,62,.3)'; ctx.shadowBlur = 14; ctx.shadowOffsetY = 6;
     if (grab.kind === 'flower'){
       const fl = S.sill[grab.idx];
-      drawFlower(ctx, phenotype(fl), grab.x, grab.y - 16, Math.min(g.dx*0.32, 27), 1, V.t,
-                 { stemLen: g.dy*0.42, sway: 0.3 });
-      drawPot(ctx, grab.x, grab.y + 14, hm.glazeOf[grab.idx]);
+      drawFlower(ctx, phenotype(fl), grab.x, grab.y - 22, Math.min(g.dx*0.36, 37), 1, V.t,
+                 { stemLen: g.dy*0.4, sway: 0.3 });
+      drawPot(ctx, grab.x, grab.y + 18, hm.glazeOf[grab.idx], 1.4);
     } else {
-      drawDecor(ctx, S.decor[grab.idx], grab.x, grab.y, 17);
+      drawDecor(ctx, S.decor[grab.idx], grab.x, grab.y, 23);
     }
     ctx.restore();
   }
 
   if (V.placing === 'flower' && V.genome){
-    drawFlower(ctx, phenotype(V.genome), W/2, H*0.93, 24, 1, V.t, { stem:false });
+    drawFlower(ctx, phenotype(V.genome), W/2, H*0.86, 28, 1, V.t, { stem:false });
     hint('Tap a pot to place the <i>' + flowerName(V.genome) + '</i>');
   } else if (V.placing === 'decor' && V.decor){
-    drawDecor(ctx, V.decor.id, W/2, H*0.92, 18);
+    drawDecor(ctx, V.decor.id, W/2, H*0.86, 24);
     hint('Tap a spot on the ledge');
   } else if (hm.bonds.length || hm.decorOn){
-    const parts = BONDS.filter(b => hm.tally[b.id]).map(b => hm.tally[b.id] + ' ' + b.name.toLowerCase());
-    if (hm.shelves) parts.push(hm.shelves + ' shelf in accord');
-    if (hm.full) parts.push('full sill');
-    if (hm.decorOn) parts.push(hm.decorOn + ' on the ledge');
-    hint(parts.join(' &nbsp;·&nbsp; ') + ' &nbsp;·&nbsp; <i>×' + hm.mult.toFixed(2) + '</i>');
+    const bits = [];
+    if (hm.bonds.length) bits.push(hm.bonds.length + (hm.bonds.length === 1 ? ' bond' : ' bonds'));
+    if (hm.shelves) bits.push(hm.shelves + (hm.shelves === 1 ? ' shelf' : ' shelves') + ' in accord');
+    if (hm.full) bits.push('full sill');
+    if (hm.decorOn) bits.push(hm.decorOn + ' on the ledge');
+    hint(bits.join(' &nbsp;·&nbsp; ') + ' &nbsp;·&nbsp; <i>×' + hm.mult.toFixed(2) + '</i>');
   } else {
-    hint('Drag flowers to rearrange. Neighbours that agree share a glaze — and speed up the post.');
+    hint('Drag flowers to rearrange &nbsp;·&nbsp; neighbours that agree share a glaze');
   }
-  txt('The Windowsill', W/2, H*0.125, 17, MOR.ink, F_SERIF);
+  txt('The Windowsill', W/2, H*0.118, 21, MOR.ink, F_SERIF);
 }
 
 /* ============================================================
    HERBARIUM SCREEN
    ============================================================ */
-function drawBook(){
-  const bg = ctx.createLinearGradient(0,0,0,H);
-  bg.addColorStop(0, MOR.card); bg.addColorStop(1, '#DED3C0');
-  ctx.fillStyle = bg; ctx.fillRect(0,0,W,H);
-
-  const st = bookStats();
-  const top = H*0.14, cw = (W - 30)/3, ch = 126;
-  const rows = Math.ceil(SPECIES.length/3);
-
-  // the sender's letters, measured before scrolling so the page knows its height
-  const letters = S.story.map(id => ({
-    id, lines: wrapText(STORY.find(x => x.id === id).line, W - 92, 12.5, F_SERIF) }));
-  let storyH = 0;
-  for (const l of letters) storyH += Math.max(36, l.lines.length*16 + 18);
-  const endLines = S.story.length === STORY.length
-    ? wrapText(STORY_END, W - 60, 12.5, F_SERIF) : null;
-  if (endLines) storyH += endLines.length*16 + 26;
-  if (!letters.length) storyH = 44;
-
-  const contentH = rows*ch + 210 + storyH;
-  const maxScroll = Math.max(0, contentH - (H - top) + 76);
-  V.bookScroll = clamp(V.bookScroll, 0, maxScroll);
-  const sc = V.bookScroll;
-
-  ctx.save();
-  ctx.beginPath(); ctx.rect(0, top - 14, W, H - top + 14); ctx.clip();
+/* The page is laid out first and drawn second. Measuring the real bottom is
+   what lets the scroll range be exact instead of a guess, and it gives tap
+   targets for free. */
+function bookLayout(){
+  const top = H*0.195, pad = 15;
+  const cols = 2, cw = (W - pad*2 - 12)/cols, ch = 172;
+  const L = { top, cw, ch, cells: [], decor: [], letters: [] };
+  let y = 0;
 
   SPECIES.forEach((sp, i) => {
-    const x = 15 + cw*(i%3), y = top + ch*Math.floor(i/3) - sc;
-    if (y > H + 40 || y < top - ch - 40) return;
-    const b = S.book[sp.id];
-    ctx.fillStyle = b ? 'rgba(255,253,247,.5)' : 'rgba(122,104,84,.05)';
-    rr(ctx, x+3, y, cw-6, ch-10, 8); ctx.fill();
-    ctx.strokeStyle = 'rgba(86,75,60,.14)'; ctx.lineWidth = 1; ctx.stroke();
+    L.cells.push({ sp, x: pad + (cw + 12)*(i % cols),
+                   y: y + ch*Math.floor(i / cols), w: cw, h: ch - 12 });
+  });
+  y += ch*Math.ceil(SPECIES.length/cols) + 10;
+
+  L.ledgeY = y; y += 34;
+  const per = 3, dw = (W - pad*2)/per;
+  DECOR.forEach((d, i) => {
+    L.decor.push({ d, x: pad + dw*(i % per) + dw/2,
+                   y: y + 40 + Math.floor(i / per)*76, r: 24 });
+  });
+  y += 40 + Math.ceil(DECOR.length/per)*76;
+
+  L.senderY = y; y += 34;
+  for (const id of S.story){
+    const lines = wrapText(STORY.find(x => x.id === id).line, W - 108, 13, F_SERIF);
+    const h = Math.max(46, lines.length*19*UI.s + 22);
+    L.letters.push({ id, lines, x: pad, y, w: W - pad*2, h: h - 8 });
+    y += h;
+  }
+  if (!S.story.length) y += 40;
+  if (S.story.length === STORY.length){
+    L.endLines = wrapText(STORY_END, W - 70, 13, F_SERIF);
+    L.endY = y + 8; y += L.endLines.length*19*UI.s + 30;
+  }
+  L.total = y;
+  L.maxScroll = Math.max(0, (top + y + 152) - H);   // clear the fade, the hint and the tab bar
+  return L;
+}
+function bookHit(p){
+  const L = bookLayout(), y = p.y - L.top + V.bookScroll;
+  for (const c of L.cells)
+    if (p.x > c.x && p.x < c.x + c.w && y > c.y && y < c.y + c.h) return { kind:'species', sp: c.sp };
+  for (const d of L.decor)
+    if (Math.hypot(p.x - d.x, y - d.y) < d.r + 10) return { kind:'decor', d: d.d };
+  for (const l of L.letters)
+    if (p.x > l.x && p.x < l.x + l.w && y > l.y && y < l.y + l.h) return { kind:'letter', id: l.id };
+  return null;
+}
+
+function drawBook(){
+  const bg = ctx.createLinearGradient(0,0,0,H);
+  bg.addColorStop(0, MOR.card); bg.addColorStop(1, '#EDE7D9');
+  ctx.fillStyle = bg; ctx.fillRect(0,0,W,H);
+
+  const st = bookStats(), L = bookLayout();
+  V.bookScroll = clamp(V.bookScroll, 0, L.maxScroll);
+  const sc = V.bookScroll, top = L.top;
+
+  ctx.save();
+  ctx.beginPath(); ctx.rect(0, top - 16, W, H - top + 16); ctx.clip();
+
+  for (const c of L.cells){
+    const y = c.y + top - sc;
+    if (y > H + 60 || y < top - c.h - 60) continue;
+    const b = S.book[c.sp.id];
+    ctx.fillStyle = b ? 'rgba(255,253,247,.66)' : 'rgba(112,96,76,.05)';
+    rr(ctx, c.x, y, c.w, c.h, 10); ctx.fill();
+    ctx.strokeStyle = 'rgba(69,62,52,.13)'; ctx.lineWidth = 1; ctx.stroke();
     if (b){
-      drawFlower(ctx, phenotype(b.g), x + cw/2, y + 44, Math.min(cw*0.3, 24), 1, V.t + i*0.7, { stem:false, sway:0.4 });
-      txt(sp.name, x + cw/2, y + 82, 10.5, MOR.ink, F_SERIF);
-      txt('×' + b.n, x + cw/2, y + 95, 9, MOR.ink3);
+      drawFlower(ctx, phenotype(b.g), c.x + c.w/2, y + 62, Math.min(c.w*0.28, 44), 1,
+                 V.t + c.y*0.01, { stem:false, sway:0.4 });
+      txt(c.sp.name, c.x + c.w/2, y + 116, 13.5, MOR.ink, F_SERIF);
+      txt('seen ' + b.n + (b.n === 1 ? ' time' : ' times'), c.x + c.w/2, y + 133, 10.5, MOR.ink3);
       VARIANTS.forEach((v, j) => {
-        const dx = x + cw/2 + (j - 2)*10;
-        ctx.beginPath(); ctx.arc(dx, y + 108, 3.1, 0, TAU);
+        const dx = c.x + c.w/2 + (j - 2)*14;
+        ctx.beginPath(); ctx.arc(dx, y + 148, 4.4, 0, TAU);
         ctx.fillStyle = b.v[v.id]
-          ? mor(blendHue(lerp(sp.hue[0], sp.hue[1], .5), v.target, v.mix), 24 + v.ds, 62 + v.dl*0.5)
-          : 'rgba(86,75,60,.14)';
+          ? pet(blendHue(lerp(c.sp.hue[0], c.sp.hue[1], .5), v.target, v.mix), 30 + v.ds, 66 + v.dl*0.5)
+          : 'rgba(69,62,52,.12)';
         ctx.fill();
+        if (b.v[v.id]){ ctx.strokeStyle = 'rgba(69,62,52,.2)'; ctx.lineWidth = 1; ctx.stroke(); }
       });
     } else {
-      ctx.fillStyle = 'rgba(86,75,60,.07)';
-      ctx.beginPath(); ctx.arc(x + cw/2, y + 44, Math.min(cw*0.26, 22), 0, TAU); ctx.fill();
-      txt('?', x + cw/2, y + 51, 20, 'rgba(86,75,60,.26)', F_SERIF);
-      txt('— — —', x + cw/2, y + 82, 10.5, 'rgba(86,75,60,.24)', F_SERIF);
-    }
-  });
-
-  // ---- the ledge ----
-  let oy = top + rows*ch - sc + 16;
-  txt('The Ledge', W/2, oy, 13, MOR.ink2, F_SERIF);
-  DECOR.forEach((d, i) => {
-    const x = 15 + (W-30)*(i + 0.5)/DECOR.length, y = oy + 36;
-    if (S.decorFound[d.id]){
-      drawDecor(ctx, d.id, x, y, Math.min((W-30)/DECOR.length*0.34, 15));
-      if (S.decor.includes(d.id)){
-        ctx.fillStyle = MOR.ochre;
-        ctx.beginPath(); ctx.arc(x, y + 20, 2.4, 0, TAU); ctx.fill();   // currently out on the ledge
-      }
-    } else {
-      ctx.fillStyle = 'rgba(86,75,60,.07)';
-      ctx.beginPath(); ctx.arc(x, y, 13, 0, TAU); ctx.fill();
-    }
-  });
-
-  // ---- the sender ----
-  oy += 76;
-  txt('The Sender', W/2, oy, 13, MOR.ink2, F_SERIF);
-  let ly = oy + 26;
-  if (!letters.length){
-    txt('Not everything in a parcel is a flower.', W/2, ly + 12, 12, 'rgba(86,75,60,.35)', F_SERIF);
-  } else {
-    for (const l of letters){
-      const h = Math.max(36, l.lines.length*16 + 18);
-      if (ly < H + 60 && ly > top - 80){
-        ctx.fillStyle = 'rgba(255,253,247,.45)';
-        rr(ctx, 15, ly, W - 30, h - 8, 8); ctx.fill();
-        ctx.strokeStyle = 'rgba(86,75,60,.12)'; ctx.lineWidth = 1; ctx.stroke();
-        drawCurio(ctx, l.id, 40, ly + (h-8)/2, 13);
-        l.lines.forEach((line, k) => {
-          ctx.font = 'italic 12.5px ' + F_SERIF;
-          ctx.fillStyle = MOR.ink2; ctx.textAlign = 'left';
-          ctx.fillText(line, 66, ly + 22 + k*16);
-        });
-        ctx.textAlign = 'center';
-      }
-      ly += h;
-    }
-    if (endLines){
-      endLines.forEach((line, k) => txt(line, W/2, ly + 18 + k*16, 12.5, MOR.ink3, F_SERIF));
+      ctx.fillStyle = 'rgba(69,62,52,.06)';
+      ctx.beginPath(); ctx.arc(c.x + c.w/2, y + 62, Math.min(c.w*0.24, 40), 0, TAU); ctx.fill();
+      txt('?', c.x + c.w/2, y + 72, 28, 'rgba(69,62,52,.22)', F_SERIF);
+      txt('— — —', c.x + c.w/2, y + 118, 13, 'rgba(69,62,52,.2)', F_SERIF);
     }
   }
+
+  txt('The Ledge', W/2, L.ledgeY + top - sc + 14, 15, MOR.ink2, F_SERIF);
+  for (const it of L.decor){
+    const y = it.y + top - sc;
+    if (y > H + 60 || y < top - 60) continue;
+    if (S.decorFound[it.d.id]){
+      drawDecor(ctx, it.d.id, it.x, y, it.r);
+      if (S.decor.includes(it.d.id)){
+        ctx.fillStyle = MOR.ochre;
+        ctx.beginPath(); ctx.arc(it.x, y + it.r + 9, 3.4, 0, TAU); ctx.fill();
+      }
+    } else {
+      ctx.fillStyle = 'rgba(69,62,52,.06)';
+      ctx.beginPath(); ctx.arc(it.x, y, it.r*0.85, 0, TAU); ctx.fill();
+    }
+  }
+
+  txt('The Sender', W/2, L.senderY + top - sc + 14, 15, MOR.ink2, F_SERIF);
+  if (!L.letters.length){
+    txt('Not everything in a parcel is a flower.', W/2, L.senderY + top - sc + 46,
+        13, 'rgba(69,62,52,.34)', F_SERIF);
+  }
+  for (const l of L.letters){
+    const y = l.y + top - sc;
+    if (y > H + 60 || y < top - l.h - 60) continue;
+    ctx.fillStyle = 'rgba(255,253,247,.62)';
+    rr(ctx, l.x, y, l.w, l.h, 10); ctx.fill();
+    ctx.strokeStyle = 'rgba(69,62,52,.11)'; ctx.lineWidth = 1; ctx.stroke();
+    drawCurio(ctx, l.id, l.x + 28, y + l.h/2, 17);
+    ctx.font = 'italic ' + (13*UI.s).toFixed(2) + 'px ' + F_SERIF;
+    ctx.fillStyle = MOR.ink2; ctx.textAlign = 'left';
+    l.lines.forEach((line, k) => ctx.fillText(line, l.x + 58, y + 26 + k*19*UI.s));
+    ctx.textAlign = 'center';
+  }
+  if (L.endLines)
+    L.endLines.forEach((line, k) =>
+      txt(line, W/2, L.endY + top - sc + 20 + k*19*UI.s, 13, MOR.ink3, F_SERIF));
   ctx.restore();
 
+  // there is more page below: say so, rather than letting it look cut off
+  if (L.maxScroll > 2){
+    const fade = ctx.createLinearGradient(0, H - 150, 0, H - 86);
+    fade.addColorStop(0, 'rgba(238,232,219,0)'); fade.addColorStop(1, 'rgba(238,232,219,.97)');
+    ctx.fillStyle = fade; ctx.fillRect(0, H - 150, W, 150);
+
+    const trackTop = top + 6, trackH = H - top - 130;
+    const thumbH = Math.max(34, trackH * (H - top) / (L.total + top));
+    const ty = trackTop + (trackH - thumbH) * (sc / L.maxScroll);
+    ctx.fillStyle = 'rgba(69,62,52,.09)'; rr(ctx, W - 8, trackTop, 4, trackH, 2); ctx.fill();
+    ctx.fillStyle = 'rgba(69,62,52,.3)';  rr(ctx, W - 8.5, ty, 5, thumbH, 2.5); ctx.fill();
+  }
+
   const hg = ctx.createLinearGradient(0,0,0,top);
-  hg.addColorStop(0, MOR.card); hg.addColorStop(1, 'rgba(239,232,218,0)');
+  hg.addColorStop(0, MOR.card); hg.addColorStop(.72, MOR.card); hg.addColorStop(1, 'rgba(248,244,234,0)');
   ctx.fillStyle = hg; ctx.fillRect(0, 0, W, top);
-  txt('The Herbarium', W/2, H*0.085, 17, MOR.ink, F_SERIF);
-  txt(st.sp + '/' + st.spAll + ' species  ·  ' + st.cw + '/' + st.cwAll + ' colourways  ·  ' +
-      st.dec + '/' + st.decAll + ' ornaments  ·  ' + st.sto + '/' + st.stoAll + ' letters',
-      W/2, H*0.115, 10, MOR.ink3);
-  hint(st.sp < st.spAll ? (st.spAll - st.sp) + ' species still unaccounted for.'
+  txt('The Herbarium', W/2, H*0.115, 21, MOR.ink, F_SERIF);
+  txt(st.sp + '/' + st.spAll + ' species · ' + st.cw + '/' + st.cwAll + ' colourways', W/2, H*0.142, 11.5, MOR.ink3);
+  txt(st.dec + '/' + st.decAll + ' ornaments · ' + st.sto + '/' + st.stoAll + ' letters', W/2, H*0.165, 11.5, MOR.ink3);
+  hint(st.sp < st.spAll ? (st.spAll - st.sp) + ' species missing &nbsp;·&nbsp; tap anything to read it'
                         : 'Every species accounted for. The colourways, though…');
 }
 
@@ -2194,7 +2334,7 @@ function frame(ts){
 window.PP = { S, V, CFG, GES, SPECIES, VARIANTS, RARITY, CURIOS,
               save, openParcel, phenotype, harmony, bookStats,
               drawFlower, makeGenome, mulberry32, ctx, get W(){return W}, get H(){return H},
-              BONDS, BD, bondBetween, DECOR, STORY, storyDue, bondsAt, showSheet,
+              BONDS, BD, bondBetween, DECOR, STORY, storyDue, bondsAt, showSheet, flowerName, bookLayout,
               shelfGeom, ledgeGeom, slotAt, ledgeAt,
               reset(){ localStorage.removeItem(KEY); location.reload(); } };
 
