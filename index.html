@@ -127,8 +127,13 @@ const CFG = {
   startParcels     : 3,
   pityAt           : 7,          // a Rare+ is guaranteed within this many opens
   curioChance      : 0.055,      // chance the parcel holds something that is not a flower
-  harmonyPerPair   : 0.06,       // sill arrangement bonus per matching neighbour pair
-  harmonyCap       : 1.75,
+  bond             : {kin:0.12, counter:0.10, tone:0.09, echo:0.06}, // per bonded pair
+  shelfAccord      : 0.10,       // a whole shelf of three, all bonded
+  fullSill         : 0.10,       // every pot filled
+  decorBonus       : 0.03,       // per ornament on the ledge
+  decorChance      : 0.05,       // chance a parcel holds an ornament
+  storyAt          : [2, 7, 14, 23, 34, 47], // opens at which the sender writes again
+  harmonyCap       : 2.00,
   squeezeSeconds   : 1.15,       // hold-to-squeeze fill time (the "pressure" substitute)
 };
 
@@ -282,6 +287,54 @@ const MUTATIONS = [
   {id:'invert', name:'Nodding'},
 ];
 
+/* How two neighbouring flowers can agree. Hue is the entry tier; the rest ask
+   you to notice something less obvious, and pay more for it. Best tier wins. */
+const BONDS = [
+  {id:'kin',     name:'Kin',          hint:'the same species',          glyph:'seed'},
+  {id:'counter', name:'Counterpoint', hint:'opposite across the wheel', glyph:'bow'},
+  {id:'tone',    name:'Tone',         hint:'tinted the same way',       glyph:'diamond'},
+  {id:'echo',    name:'Echo',         hint:'a neighbouring hue',        glyph:'ring'},
+];
+const BD = {}; BONDS.forEach(b => BD[b.id] = b);
+function bondBetween(a, b){
+  if (!a || !b) return null;
+  if (a.sp === b.sp) return BD.kin;
+  const gap = hueGap(phenotype(a).hue, phenotype(b).hue);
+  if (gap > 150) return BD.counter;
+  if (a.va === b.va && a.va !== 'dawn') return BD.tone;   // dawn is "untinted", not a shared colourway
+  if (gap <  42)    return BD.echo;
+  return null;
+}
+function bondGlyph(ctx, kind, x, y, col, R = 5){
+  ctx.save(); ctx.translate(x, y);
+  ctx.strokeStyle = col; ctx.fillStyle = col; ctx.lineWidth = 1.5;
+  if (kind === 'ring'){
+    ctx.beginPath(); ctx.arc(0, 0, R*0.72, 0, TAU); ctx.stroke();
+  } else if (kind === 'diamond'){
+    ctx.beginPath(); ctx.moveTo(0,-R); ctx.lineTo(R*0.75,0); ctx.lineTo(0,R); ctx.lineTo(-R*0.75,0);
+    ctx.closePath(); ctx.stroke();
+  } else if (kind === 'seed'){
+    ctx.beginPath(); ctx.arc(0, 0, R*0.4, 0, TAU); ctx.fill();
+    ctx.beginPath(); ctx.arc(0, 0, R*0.85, 0, TAU); ctx.stroke();
+  } else { // bow — two triangles meeting, for opposites
+    ctx.beginPath(); ctx.moveTo(-R,-R*0.8); ctx.lineTo(0,0); ctx.lineTo(-R,R*0.8); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.moveTo( R,-R*0.8); ctx.lineTo(0,0); ctx.lineTo( R,R*0.8); ctx.closePath(); ctx.fill();
+  }
+  ctx.restore();
+}
+
+/* Deliveries that are not flowers split in two. Ornaments furnish the ledge;
+   story items carry the only voice in the game. */
+const DECOR = [
+  {id:'bell',  name:'A small brass bell', note:'It has no clapper. It rings anyway, once, when you are not listening.'},
+  {id:'moth',  name:'A paper moth',       note:'Folded from a page of something. You can almost read the underside.'},
+  {id:'float', name:'A glass float',      note:'Still smells faintly of rope and low tide.'},
+  {id:'shell', name:'A spiral shell',     note:'Held to the ear it gives you back the room you are already in.'},
+  {id:'candle',name:'A stub of candle',   note:'Burned once, briefly, by someone in a hurry.'},
+  {id:'stone', name:'A grey river stone', note:'Perfectly ordinary, and carried a very long way.'},
+];
+const DE = {}; DECOR.forEach(d => DE[d.id] = d);
+
 const CURIOS = [
   {id:'frog',    name:'A very small frog',  note:'It waits politely to be let out.'},
   {id:'button',  name:'A brass button',     note:'Four holes. One thread still in it.'},
@@ -291,6 +344,17 @@ const CURIOS = [
   {id:'key',     name:'A key, unlabelled',  note:'Not for any door that you own.'},
 ];
 const CU = {}; CURIOS.forEach(c => CU[c.id]=c);
+
+/* Ordered, and paced against CFG.storyAt. A random order would be noise. */
+const STORY = [
+  {id:'key',     line:'The first thing that was not a flower was a key. No note. No door.'},
+  {id:'ticket',  line:'Row F. The film was about a garden that outlived its gardener.'},
+  {id:'thimble', line:'Someone sewed for a long time, and badly, and did not stop.'},
+  {id:'button',  line:'Brass, four holes, one thread still in it. From a coat I have never seen.'},
+  {id:'snail',   line:'It travelled the whole way inside, and seems entirely unbothered.'},
+  {id:'frog',    line:'Alive. Which means somebody packed this parcel this morning.'},
+];
+const STORY_END = 'The parcels keep coming. You have stopped wondering who, and started keeping the shelf tidy for them.';
 
 /* Each matched group gets one glaze. The mark is not decoration: colour alone
    would fail for a colour-blind player, so each glaze also has a distinct
@@ -628,6 +692,64 @@ function drawFlower(ctx, ph, x, y, R, bloom = 1, t = 0, opts = {}){
   }
   ctx.shadowBlur = 0;
   drawCentre(ctx, ph, R*0.3*bloom, t);
+  ctx.restore();
+}
+
+function drawDecor(ctx, id, x, y, R){
+  ctx.save(); ctx.translate(x, y);
+  ctx.strokeStyle = 'rgba(86,75,60,.38)'; ctx.lineWidth = 1.1;
+  if (id === 'bell'){
+    ctx.fillStyle = '#BE9F63';
+    ctx.beginPath(); ctx.moveTo(-R*0.6, R*0.5);
+    ctx.quadraticCurveTo(-R*0.55, -R*0.5, 0, -R*0.6);
+    ctx.quadraticCurveTo(R*0.55, -R*0.5, R*0.6, R*0.5);
+    ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#96804F';
+    ctx.beginPath(); ctx.ellipse(0, R*0.5, R*0.6, R*0.14, 0, 0, TAU); ctx.fill();
+    ctx.beginPath(); ctx.arc(0, -R*0.74, R*0.16, 0, TAU); ctx.stroke();
+  } else if (id === 'moth'){
+    ctx.fillStyle = '#E3D9C2';
+    for (const sgn of [-1, 1]){
+      ctx.beginPath(); ctx.moveTo(0, 0);
+      ctx.quadraticCurveTo(sgn*R*1.1, -R*0.85, sgn*R*0.85, R*0.1);
+      ctx.quadraticCurveTo(sgn*R*0.6, R*0.7, 0, R*0.15);
+      ctx.closePath(); ctx.fill(); ctx.stroke();
+    }
+    ctx.fillStyle = '#9A8362';
+    ctx.beginPath(); ctx.ellipse(0, 0, R*0.13, R*0.55, 0, 0, TAU); ctx.fill();
+  } else if (id === 'float'){
+    const g = ctx.createRadialGradient(-R*0.3, -R*0.35, R*0.05, 0, 0, R*0.8);
+    g.addColorStop(0, 'rgba(240,244,240,.95)'); g.addColorStop(1, 'rgba(176,192,186,.85)');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(0, 0, R*0.78, 0, TAU); ctx.fill(); ctx.stroke();
+    ctx.strokeStyle = 'rgba(140,124,96,.5)';
+    for (let i=-1;i<=1;i++){
+      ctx.beginPath(); ctx.moveTo(i*R*0.42, -R*0.68); ctx.lineTo(i*R*0.42, R*0.68); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(-R*0.68, i*R*0.42); ctx.lineTo(R*0.68, i*R*0.42); ctx.stroke();
+    }
+  } else if (id === 'shell'){
+    ctx.fillStyle = '#D8C8AE';
+    ctx.beginPath(); ctx.arc(0, 0, R*0.78, 0, TAU); ctx.fill(); ctx.stroke();
+    ctx.strokeStyle = 'rgba(122,104,84,.5)'; ctx.lineWidth = 1.3;
+    ctx.beginPath();
+    for (let a=0; a<TAU*2.6; a+=0.12){
+      const rad = R*0.07*a, px = Math.cos(a)*rad, py = Math.sin(a)*rad;
+      a ? ctx.lineTo(px,py) : ctx.moveTo(px,py);
+    }
+    ctx.stroke();
+  } else if (id === 'candle'){
+    ctx.fillStyle = '#E8DFCE';
+    rr(ctx, -R*0.34, -R*0.15, R*0.68, R*1.0, R*0.1); ctx.fill(); ctx.stroke();
+    ctx.strokeStyle = '#7C6842'; ctx.lineWidth = 1.4;
+    ctx.beginPath(); ctx.moveTo(0, -R*0.15); ctx.lineTo(0, -R*0.4); ctx.stroke();
+    ctx.fillStyle = 'rgba(190,159,99,.75)';
+    ctx.beginPath(); ctx.ellipse(0, -R*0.62, R*0.16, R*0.3, 0, 0, TAU); ctx.fill();
+  } else { // stone
+    const g = ctx.createRadialGradient(-R*0.2, -R*0.3, R*0.05, 0, 0, R*0.9);
+    g.addColorStop(0, '#C3C0B6'); g.addColorStop(1, '#9C9A90');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.ellipse(0, R*0.08, R*0.82, R*0.6, -0.15, 0, TAU); ctx.fill(); ctx.stroke();
+  }
   ctx.restore();
 }
 
@@ -1153,14 +1275,31 @@ addEventListener('orientationchange', () => setTimeout(resize, 120));
    ============================================================ */
 const KEY = 'parcel-petal-v1';
 function fresh(){
-  return { v:1, mail:CFG.startParcels, lastAccrual:Date.now(), pity:0, opened:0,
-           sill:new Array(9).fill(null), book:{}, odd:{},
+  return { v:2, mail:CFG.startParcels, lastAccrual:Date.now(), pity:0, opened:0,
+           sill:new Array(9).fill(null), book:{},
+           decor:new Array(3).fill(null),   // the ledge
+           decorFound:{}, story:[],          // ornaments seen; story ids, in arrival order
            streak:1, lastDay:today(), special:'', specialPending:false, seen:false };
 }
 let S = fresh();
 try {
   const raw = localStorage.getItem(KEY);
-  if (raw){ const o = JSON.parse(raw); if (o && o.v === 1) S = Object.assign(fresh(), o); }
+  if (raw){
+    const o = JSON.parse(raw);
+    if (o && (o.v === 1 || o.v === 2)){
+      S = Object.assign(fresh(), o);
+      if (o.v === 1){                       // v1 kept one undifferentiated "oddments" bag
+        S.story = STORY.filter(x => o.odd && o.odd[x.id]).map(x => x.id);
+        S.decor = new Array(3).fill(null);
+        S.decorFound = {};
+        delete S.odd;
+        S.v = 2;
+      }
+      if (!Array.isArray(S.decor) || S.decor.length !== 3) S.decor = new Array(3).fill(null);
+      if (!Array.isArray(S.story)) S.story = [];
+      if (!S.decorFound) S.decorFound = {};
+    }
+  }
 } catch(e){}
 let saveT = 0;
 function save(){ try { localStorage.setItem(KEY, JSON.stringify(S)); } catch(e){} }
@@ -1168,27 +1307,45 @@ function save(){ try { localStorage.setItem(KEY, JSON.stringify(S)); } catch(e){
 /* scene state — deliberately not persisted */
 const V = { screen:'table', mode:'idle', t:0, box:null, P:null, layers:[], genome:null, curio:null,
             special:false, bloom:0, shellA:1, shards:[], pollen:[], placing:false,
-            bookScroll:0, drag:null, note:'', noteT:0, shake:0 };
+            bookScroll:0, bookDrag:null, grab:null, decor:null, story:null,
+            note:'', noteT:0, shake:0 };
 
 /* ---------- derived ---------- */
 function hueGap(a, b){ return Math.abs(((a - b) % 360 + 540) % 360 - 180); }
 
-/* Matching used to be invisible: you could see the multiplier move but not
-   which flower answered which. Neighbours that agree on hue are now unioned
-   into a group, and every pot in a group is glazed the same colour. */
+/* The sill is scored over its twelve neighbour pairs. Each pair takes its best
+   bond tier, bonded neighbours are unioned into a set, and every pot in a set
+   is thrown in the same glaze so the arrangement can be read at a glance. */
 function harmony(){
   const parent = Array.from({length:9}, (_,i) => i);
   const find = a => parent[a] === a ? a : (parent[a] = find(parent[a]));
   const union = (a,b) => { const ra = find(a), rb = find(b); if (ra !== rb) parent[ra] = rb; };
-  let pairs = 0;
+
+  const bonds = [], tally = {};
+  let sum = 0;
   for (let i=0;i<9;i++){
-    const a = S.sill[i]; if (!a) continue;
-    const ha = phenotype(a).hue;
+    if (!S.sill[i]) continue;
     for (const j of [(i%3 < 2) ? i+1 : -1, (i < 6) ? i+3 : -1]){
       if (j < 0 || !S.sill[j]) continue;
-      if (hueGap(ha, phenotype(S.sill[j]).hue) < 42){ union(i, j); pairs++; }
+      const b = bondBetween(S.sill[i], S.sill[j]);
+      if (!b) continue;
+      bonds.push({ i, j, tier: b.id, vertical: j === i+3 });
+      tally[b.id] = (tally[b.id] || 0) + 1;
+      sum += CFG.bond[b.id];
+      union(i, j);
     }
   }
+
+  // a whole shelf of three, both of its pairs bonded
+  let shelves = 0;
+  for (let r=0;r<3;r++){
+    const a = r*3;
+    if (S.sill[a] && S.sill[a+1] && S.sill[a+2] &&
+        bonds.some(x => x.i===a && x.j===a+1) && bonds.some(x => x.i===a+1 && x.j===a+2)) shelves++;
+  }
+  const full = S.sill.every(Boolean);
+  const decorOn = (S.decor || []).filter(Boolean).length;
+
   const size = {};
   for (let i=0;i<9;i++) if (S.sill[i]){ const r = find(i); size[r] = (size[r] || 0) + 1; }
   const glazeOf = new Array(9).fill(-1), seat = {};
@@ -1200,14 +1357,27 @@ function harmony(){
     if (!(r in seat)) seat[r] = next++ % GLAZES.length;
     glazeOf[i] = seat[r];
   }
-  return { pairs, groups: next, glazeOf,
-           mult: Math.min(CFG.harmonyCap, 1 + pairs*CFG.harmonyPerPair) };
+
+  const mult = Math.min(CFG.harmonyCap,
+    1 + sum + shelves*CFG.shelfAccord + (full ? CFG.fullSill : 0) + decorOn*CFG.decorBonus);
+  return { bonds, tally, pairs: bonds.length, shelves, full, decorOn,
+           groups: next, glazeOf, mult, root: find };
 }
+function bondsAt(i, hm){
+  return hm.bonds.filter(b => b.i === i || b.j === i);
+}
+
 function bookStats(){
   const sp = Object.keys(S.book).length;
   let cw = 0; for (const k in S.book) cw += Object.keys(S.book[k].v).length;
   return { sp, spAll: SPECIES.length, cw, cwAll: SPECIES.length*VARIANTS.length,
-           odd: Object.keys(S.odd).length, oddAll: CURIOS.length };
+           dec: Object.keys(S.decorFound).length, decAll: DECOR.length,
+           sto: S.story.length, stoAll: STORY.length };
+}
+/* The sender writes on a schedule, not a dice roll, so the thread stays in order. */
+function storyDue(){
+  const n = S.story.length;
+  return n < STORY.length && S.opened >= CFG.storyAt[n] ? STORY[n] : null;
 }
 function undiscovered(){ return SPECIES.filter(s => !S.book[s.id]); }
 
@@ -1261,7 +1431,7 @@ function setScreen(s){
 }
 document.querySelectorAll('#tabs button').forEach(b => b.onclick = () => {
   Snd.resume();
-  if (V.placing && b.dataset.s !== 'shelf'){ V.placing = false; V.genome = null; }
+  if (V.placing && b.dataset.s !== 'shelf'){ V.placing = false; V.genome = null; V.decor = null; }
   setScreen(b.dataset.s); updateHUD();
 });
 
@@ -1276,8 +1446,6 @@ function openParcel(){
   if (S.mail <= 0) return;
   S.mail--;
   const r = mulberry32((Math.random()*1e9)|0);
-  V.special = !!S.specialPending;
-  S.specialPending = false;
 
   // heavier parcels are rarer but pay better
   let P;
@@ -1287,17 +1455,24 @@ function openParcel(){
   V.layers = P.layers.map(k => { const L = {kind:k, p:0}; GES[k].init(L, r, V.box); return L; });
 
   const und = undiscovered();
-  if (V.special && und.length){
-    V.curio = null;
-    V.genome = makeGenome(r, { sp: pick(r, und).id, ra: r() < 0.55 ? 'rare' : 'uncommon' });
-  } else if (r() < CFG.curioChance){
-    V.curio = pick(r, CURIOS); V.genome = null;
+  const due = storyDue();
+  V.genome = null; V.story = null; V.decor = null; V.special = false;
+  if (due){
+    // A letter outranks everything, and does not burn the day's special delivery.
+    V.story = due;
   } else {
-    V.curio = null;
-    let forced = null;
-    if (S.pity >= CFG.pityAt - 1) forced = r() < 0.2 ? 'legendary' : 'rare';
-    else if (P.heavy) forced = r() < 0.34 ? 'rare' : 'uncommon';
-    V.genome = makeGenome(r, forced ? { ra: forced } : {});
+    V.special = !!S.specialPending;
+    S.specialPending = false;
+    if (V.special && und.length){
+      V.genome = makeGenome(r, { sp: pick(r, und).id, ra: r() < 0.55 ? 'rare' : 'uncommon' });
+    } else if (r() < CFG.decorChance){
+      V.decor = pick(r, DECOR);
+    } else {
+      let forced = null;
+      if (S.pity >= CFG.pityAt - 1) forced = r() < 0.2 ? 'legendary' : 'rare';
+      else if (P.heavy) forced = r() < 0.34 ? 'rare' : 'uncommon';
+      V.genome = makeGenome(r, forced ? { ra: forced } : {});
+    }
   }
   V.mode = 'unwrap'; V.bloom = 0; V.shellA = 1; V.shards = []; V.pollen = [];
   setScreen('table');
@@ -1318,8 +1493,12 @@ function completeParcel(){
                     rot: Math.random()*TAU, vr: (Math.random()-0.5)*9,
                     s: 6 + Math.random()*13, col: tint, life: 1 });
   }
-  if (V.curio){
-    S.odd[V.curio.id] = (S.odd[V.curio.id] || 0) + 1;
+  if (V.story){
+    if (!S.story.includes(V.story.id)) S.story.push(V.story.id);
+    Snd.chime('rare');
+  } else if (V.decor){
+    V.decorNew = !S.decorFound[V.decor.id];
+    S.decorFound[V.decor.id] = (S.decorFound[V.decor.id] || 0) + 1;
     Snd.chime('uncommon');
   } else {
     const g = V.genome, rar = g.ra;
@@ -1342,14 +1521,26 @@ function completeParcel(){
   setTimeout(showSheet, 820);
 }
 function showSheet(){
-  if (V.curio){
-    $('#shRar').textContent = 'ODDMENT';  $('#shRar').style.color = '#cfc4b4';
-    $('#shName').textContent = V.curio.name;
+  if (V.story){
+    const c = CU[V.story.id];
+    $('#shRar').textContent = 'FROM THE SENDER';
+    $('#shRar').style.color = '#9A7B3E';
+    $('#shName').textContent = c.name;
     $('#shMu').textContent = '';
-    $('#shPoem').textContent = V.curio.note;
+    $('#shPoem').textContent = V.story.line;
     $('#bSill').style.display = 'none';
-    $('#bBook').textContent = 'Into the book';
+    $('#bBook').textContent = 'Keep it';
     $('#bBook').classList.add('hi');
+  } else if (V.decor){
+    $('#shRar').textContent = 'ORNAMENT';
+    $('#shRar').style.color = MOR.ink3;
+    $('#shName').innerHTML = V.decor.name + (V.decorNew ? '<span class="new">NEW</span>' : '');
+    $('#shMu').textContent = '';
+    $('#shPoem').textContent = V.decor.note;
+    $('#bSill').style.display = '';
+    $('#bSill').textContent = 'Set on the ledge';
+    $('#bBook').textContent = 'Into the book';
+    $('#bBook').classList.remove('hi');
   } else {
     const g = V.genome, ra = RA[g.ra];
     $('#shRar').textContent = (V.special ? 'SPECIAL DELIVERY · ' : '') + ra.name.toUpperCase();
@@ -1359,6 +1550,7 @@ function showSheet(){
     $('#shMu').textContent = g.mu ? MUTATIONS.find(m=>m.id===g.mu).name : '';
     $('#shPoem').textContent = SP[g.sp].poem;
     $('#bSill').style.display = '';
+    $('#bSill').textContent = 'Put on the sill';
     $('#bBook').textContent = 'Into the book';
     $('#bBook').classList.remove('hi');
   }
@@ -1366,10 +1558,21 @@ function showSheet(){
 }
 function hideSheet(){ elSheet.classList.remove('up'); }
 
-$('#bBook').onclick = () => { hideSheet(); V.mode='idle'; V.genome=null; V.curio=null; updateHUD(); save(); };
+$('#bBook').onclick = () => {
+  hideSheet(); V.mode='idle';
+  V.genome = null; V.decor = null; V.story = null;
+  updateHUD(); save();
+};
 $('#bSill').onclick = () => {
-  hideSheet(); V.placing = true; setScreen('shelf');
-  note(S.sill.includes(null) ? 'Tap an empty pot.' : 'The sill is full — tap one to swap it out.', 2600);
+  hideSheet(); setScreen('shelf');
+  if (V.decor){
+    V.placing = 'decor';
+    note(S.decor.includes(null) ? 'Tap an empty spot on the ledge.'
+                                : 'The ledge is full — tap one to swap it out.', 2600);
+  } else {
+    V.placing = 'flower';
+    note(S.sill.includes(null) ? 'Tap an empty pot.' : 'The sill is full — tap one to swap it out.', 2600);
+  }
 };
 $('#bStart').onclick = () => {
   Snd.resume(); S.seen = true; save();
@@ -1380,15 +1583,26 @@ $('#bStart').onclick = () => {
 if (S.seen){ const i = $('#intro'); if (i) i.remove(); }
 
 function placeAt(i){
-  if (!V.placing || !V.genome) return;
+  if (V.placing !== 'flower' || !V.genome) return;
   const old = S.sill[i];
   S.sill[i] = V.genome;
   V.placing = false; V.genome = null;
   Snd.press();
-  const hm = harmony();
+  const hm = harmony(), mine = bondsAt(i, hm);
   note(old ? 'Swapped. The old one is pressed into the book.'
-           : (hm.pairs ? 'Placed. ' + hm.pairs + ' matching pair' + (hm.pairs>1?'s':'') + ' — parcels arrive faster.'
-                       : 'Placed.'), 2600);
+           : mine.length
+             ? 'Placed — ' + mine.map(b => BD[b.tier].name.toLowerCase()).join(' and ') +
+               '. Parcels arrive ×' + hm.mult.toFixed(2) + ' faster.'
+             : 'Placed. No bond yet — try a neighbour it agrees with.', 3000);
+  V.mode = 'idle';
+  updateHUD(); save();
+}
+function placeDecor(i){
+  if (V.placing !== 'decor' || !V.decor) return;
+  S.decor[i] = V.decor.id;
+  V.placing = false; V.decor = null;
+  Snd.press();
+  note('Set on the ledge. ×' + harmony().mult.toFixed(2) + ' faster.', 2400);
   V.mode = 'idle';
   updateHUD(); save();
 }
@@ -1414,14 +1628,15 @@ cv.addEventListener('pointerdown', e => {
     return;
   }
   if (V.screen === 'shelf'){
+    if (V.placing === 'decor'){ const d = ledgeAt(p); if (d >= 0) placeDecor(d); return; }
+    if (V.placing === 'flower'){ const i = slotAt(p); if (i >= 0) placeAt(i); return; }
     const i = slotAt(p);
-    if (i >= 0){
-      if (V.placing) placeAt(i);
-      else if (S.sill[i]) note(flowerName(S.sill[i]) + ' — ' + RA[S.sill[i].ra].name.toLowerCase(), 1900);
-    }
+    if (i >= 0 && S.sill[i]){ V.grab = {kind:'flower', idx:i, x:p.x, y:p.y, x0:p.x, y0:p.y, moved:false}; return; }
+    const d = ledgeAt(p);
+    if (d >= 0 && S.decor[d]){ V.grab = {kind:'decor', idx:d, x:p.x, y:p.y, x0:p.x, y0:p.y, moved:false}; return; }
     return;
   }
-  if (V.screen === 'book'){ V.drag = p.y; V.drag0 = V.bookScroll; }
+  if (V.screen === 'book'){ V.bookDrag = p.y; V.bookDrag0 = V.bookScroll; }
 });
 cv.addEventListener('pointermove', e => {
   const p = pos(e);
@@ -1431,8 +1646,12 @@ cv.addEventListener('pointermove', e => {
   if (V.screen === 'table' && V.mode === 'unwrap'){
     const L = activeLayer();
     if (L) GES[L.kind].move(L, p, input.p, V.box);
-  } else if (V.screen === 'book' && V.drag !== null){
-    V.bookScroll = V.drag0 - (p.y - V.drag);
+  } else if (V.screen === 'shelf' && V.grab){
+    V.grab.x = p.x; V.grab.y = p.y;
+    // a small threshold keeps a tap an inspection, not a fumbled drag
+    if (!V.grab.moved && Math.hypot(p.x - V.grab.x0, p.y - V.grab.y0) > 8) V.grab.moved = true;
+  } else if (V.screen === 'book' && V.bookDrag !== null){
+    V.bookScroll = V.bookDrag0 - (p.y - V.bookDrag);
   }
   input.prev = input.p; input.p = p;
 });
@@ -1441,7 +1660,33 @@ function endPointer(e){
   input.down = false;
   const L = (V.screen === 'table' && V.mode === 'unwrap') ? activeLayer() : null;
   if (L) GES[L.kind].up(L, input.p, V.box);
-  V.drag = null;
+  V.bookDrag = null;
+
+  const gb = V.grab; V.grab = null;
+  if (!gb) return;
+  if (!gb.moved){                                   // a tap: tell me about this one
+    if (gb.kind === 'flower'){
+      const hm = harmony(), mine = bondsAt(gb.idx, hm);
+      note(flowerName(S.sill[gb.idx]) + ' — ' +
+           (mine.length ? mine.map(b => BD[b.tier].name + ' (' + BD[b.tier].hint + ')').join(', ')
+                        : 'no bond with its neighbours yet'), 3200);
+    } else {
+      note(DE[S.decor[gb.idx]].name, 2000);
+    }
+    return;
+  }
+  const arr = gb.kind === 'flower' ? S.sill : S.decor;
+  const t = gb.kind === 'flower' ? slotAt(input.p) : ledgeAt(input.p);
+  if (t >= 0 && t !== gb.idx){
+    const tmp = arr[t]; arr[t] = arr[gb.idx]; arr[gb.idx] = tmp;
+    Snd.press();
+    if (gb.kind === 'flower'){
+      const hm = harmony(), mine = bondsAt(t, hm);
+      if (mine.length) note(mine.map(b => BD[b.tier].name).join(' + ') +
+                            ' &nbsp;·&nbsp; ×' + hm.mult.toFixed(2), 2200);
+    }
+    updateHUD(); save();
+  }
 }
 cv.addEventListener('pointerup', endPointer);
 cv.addEventListener('pointercancel', endPointer);
@@ -1451,6 +1696,18 @@ document.addEventListener('visibilitychange', () => { if (document.hidden) save(
 
 const F_SERIF = "'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, serif";
 const F_SANS  = "ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif";
+function wrapText(text, maxW, size, font){
+  ctx.font = size + 'px ' + font;
+  const words = String(text).split(' '), lines = [];
+  let line = '';
+  for (const w of words){
+    const t = line ? line + ' ' + w : w;
+    if (line && ctx.measureText(t).width > maxW){ lines.push(line); line = w; }
+    else line = t;
+  }
+  if (line) lines.push(line);
+  return lines;
+}
 function txt(s, x, y, size, col, font = F_SANS, align='center', weight=''){
   ctx.font = (weight ? weight + ' ' : '') + size + 'px ' + font;
   ctx.fillStyle = col; ctx.textAlign = align; ctx.textBaseline = 'alphabetic';
@@ -1614,8 +1871,10 @@ function drawTable(){
     ctx.closePath(); ctx.fill(); ctx.restore();
   }
   const e = 1 - Math.pow(1 - V.bloom, 3);
-  if (V.curio){
-    drawCurio(ctx, V.curio.id, box.cx, box.cy, 46*e);
+  if (V.story){
+    drawCurio(ctx, V.story.id, box.cx, box.cy, 46*e);
+  } else if (V.decor){
+    drawDecor(ctx, V.decor.id, box.cx, box.cy, 44*e);
   } else {
     const ph = phenotype(V.genome);
     const R = Math.min(W*0.245, 96);
@@ -1644,8 +1903,20 @@ function drawTable(){
    SILL SCREEN
    ============================================================ */
 function shelfGeom(){
-  return { x0: W*0.22, dx: W*0.28, y0: H*0.37, dy: H*0.17,
+  return { x0: W*0.22, dx: W*0.28, y0: H*0.345, dy: H*0.158,
            slot(i){ return { x: this.x0 + this.dx*(i%3), y: this.y0 + this.dy*Math.floor(i/3) }; } };
+}
+function ledgeGeom(){
+  return { y: H*0.755, x0: W*0.28, dx: W*0.22,
+           slot(i){ return { x: this.x0 + this.dx*i, y: this.y }; } };
+}
+function ledgeAt(p){
+  const g = ledgeGeom();
+  for (let i=0;i<3;i++){
+    const s = g.slot(i);
+    if (Math.abs(p.x - s.x) < g.dx*0.46 && p.y > s.y - 34 && p.y < s.y + 16) return i;
+  }
+  return -1;
 }
 function slotAt(p){
   const g = shelfGeom();
@@ -1657,7 +1928,10 @@ function slotAt(p){
 }
 function drawShelf(){
   drawBackdrop('shelf');
-  const g = shelfGeom(), hm = harmony();
+  const g = shelfGeom(), lg = ledgeGeom(), hm = harmony();
+  const grab = V.grab && V.grab.moved ? V.grab : null;
+  const hoverSlot  = grab && grab.kind === 'flower' ? slotAt(V.grab)  : -1;
+  const hoverLedge = grab && grab.kind === 'decor'  ? ledgeAt(V.grab) : -1;
 
   for (let row=0; row<3; row++){
     const y = g.y0 + g.dy*row + 6;
@@ -1666,17 +1940,19 @@ function drawShelf(){
     ctx.fillStyle = 'rgba(255,252,244,.28)'; rr(ctx, W*0.06, y, W*0.88, 3, 1.5); ctx.fill();
   }
 
+  // pots and flowers
   for (let i=0;i<9;i++){
     const s = g.slot(i), fl = S.sill[i];
-    if (fl){
-      const ph = phenotype(fl);
-      const R = Math.min(g.dx*0.3, 25);
-      drawFlower(ctx, ph, s.x, s.y - g.dy*0.5, R, 1, V.t + i, { stemLen: g.dy*0.46, sway: 0.6 });
+    const lifted = grab && grab.kind === 'flower' && grab.idx === i;
+    if (fl && !lifted){
+      drawFlower(ctx, phenotype(fl), s.x, s.y - g.dy*0.5, Math.min(g.dx*0.3, 25), 1, V.t + i,
+                 { stemLen: g.dy*0.46, sway: 0.6 });
       drawPot(ctx, s.x, s.y, hm.glazeOf[i]);
     } else {
-      ctx.strokeStyle = V.placing ? `rgba(152,124,62,${0.6 + Math.sin(V.t*4 + i)*0.3})`
-                                  : 'rgba(86,75,60,.26)';
-      ctx.lineWidth = 1.6; ctx.setLineDash([4,4]);
+      const live = V.placing === 'flower' || lifted || hoverSlot === i;
+      ctx.strokeStyle = live ? `rgba(152,124,62,${0.6 + Math.sin(V.t*4 + i)*0.28})`
+                             : 'rgba(86,75,60,.26)';
+      ctx.lineWidth = hoverSlot === i ? 2.4 : 1.6; ctx.setLineDash([4,4]);
       ctx.beginPath();
       ctx.moveTo(s.x - 13, s.y - 10); ctx.lineTo(s.x + 13, s.y - 10);
       ctx.lineTo(s.x + 9, s.y + 6);   ctx.lineTo(s.x - 9, s.y + 6);
@@ -1685,16 +1961,64 @@ function drawShelf(){
     }
   }
 
-  if (V.placing && V.genome){
-    drawFlower(ctx, phenotype(V.genome), W/2, H*0.9, 26, 1, V.t, { stem:false });
+  // bond marks: between the pots for a shelf-mate, stamped on the plank for the one below
+  for (const bd of hm.bonds){
+    if (grab && (grab.idx === bd.i || grab.idx === bd.j)) continue;
+    const s1 = g.slot(bd.i), s2 = g.slot(bd.j);
+    const col = GLAZES[hm.glazeOf[bd.i] >= 0 ? hm.glazeOf[bd.i] : 0].rim;
+    if (bd.vertical) bondGlyph(ctx, BD[bd.tier].glyph, s1.x, s1.y + 10.5, col, 4.4);
+    else             bondGlyph(ctx, BD[bd.tier].glyph, (s1.x + s2.x)/2, s1.y - 2, col, 5);
+  }
+
+  // the window ledge, for things that are not flowers
+  const ly = lg.y + 8;
+  ctx.fillStyle = 'rgba(112,96,76,.18)'; ctx.fillRect(W*0.1, ly + 11, W*0.8, 5);
+  ctx.fillStyle = MOR.sill; rr(ctx, W*0.1, ly, W*0.8, 11, 3); ctx.fill();
+  ctx.fillStyle = 'rgba(255,252,244,.26)'; rr(ctx, W*0.1, ly, W*0.8, 3.5, 1.5); ctx.fill();
+  for (let i=0;i<3;i++){
+    const s = lg.slot(i), id = S.decor[i];
+    const lifted = grab && grab.kind === 'decor' && grab.idx === i;
+    if (id && !lifted){
+      drawDecor(ctx, id, s.x, s.y - 4, 15);
+    } else {
+      const live = V.placing === 'decor' || lifted || hoverLedge === i;
+      ctx.strokeStyle = live ? `rgba(152,124,62,${0.6 + Math.sin(V.t*4 + i)*0.28})`
+                             : 'rgba(86,75,60,.2)';
+      ctx.lineWidth = hoverLedge === i ? 2.4 : 1.5; ctx.setLineDash([3,4]);
+      ctx.beginPath(); ctx.arc(s.x, s.y - 5, 14, 0, TAU); ctx.stroke();
+      ctx.setLineDash([]);
+    }
+  }
+
+  // whatever is currently in your hand
+  if (grab){
+    ctx.save();
+    ctx.shadowColor = 'rgba(90,78,62,.3)'; ctx.shadowBlur = 14; ctx.shadowOffsetY = 6;
+    if (grab.kind === 'flower'){
+      const fl = S.sill[grab.idx];
+      drawFlower(ctx, phenotype(fl), grab.x, grab.y - 16, Math.min(g.dx*0.32, 27), 1, V.t,
+                 { stemLen: g.dy*0.42, sway: 0.3 });
+      drawPot(ctx, grab.x, grab.y + 14, hm.glazeOf[grab.idx]);
+    } else {
+      drawDecor(ctx, S.decor[grab.idx], grab.x, grab.y, 17);
+    }
+    ctx.restore();
+  }
+
+  if (V.placing === 'flower' && V.genome){
+    drawFlower(ctx, phenotype(V.genome), W/2, H*0.93, 24, 1, V.t, { stem:false });
     hint('Tap a pot to place the <i>' + flowerName(V.genome) + '</i>');
-  } else if (hm.groups){
-    // name the mechanism in the same words the pots are speaking
-    hint(hm.groups + (hm.groups > 1 ? ' glazed sets' : ' glazed set') +
-         ' &nbsp;·&nbsp; ' + hm.pairs + ' pair' + (hm.pairs>1?'s':'') +
-         ' &nbsp;·&nbsp; parcels arrive <i>×' + hm.mult.toFixed(2) + '</i> faster');
+  } else if (V.placing === 'decor' && V.decor){
+    drawDecor(ctx, V.decor.id, W/2, H*0.92, 18);
+    hint('Tap a spot on the ledge');
+  } else if (hm.bonds.length || hm.decorOn){
+    const parts = BONDS.filter(b => hm.tally[b.id]).map(b => hm.tally[b.id] + ' ' + b.name.toLowerCase());
+    if (hm.shelves) parts.push(hm.shelves + ' shelf in accord');
+    if (hm.full) parts.push('full sill');
+    if (hm.decorOn) parts.push(hm.decorOn + ' on the ledge');
+    hint(parts.join(' &nbsp;·&nbsp; ') + ' &nbsp;·&nbsp; <i>×' + hm.mult.toFixed(2) + '</i>');
   } else {
-    hint('Stand flowers of a similar hue side by side — they share a pot glaze, and speed up the post.');
+    hint('Drag flowers to rearrange. Neighbours that agree share a glaze — and speed up the post.');
   }
   txt('The Windowsill', W/2, H*0.125, 17, MOR.ink, F_SERIF);
 }
@@ -1710,8 +2034,19 @@ function drawBook(){
   const st = bookStats();
   const top = H*0.14, cw = (W - 30)/3, ch = 126;
   const rows = Math.ceil(SPECIES.length/3);
-  const contentH = rows*ch + 150;
-  const maxScroll = Math.max(0, contentH - (H - top) + 60);
+
+  // the sender's letters, measured before scrolling so the page knows its height
+  const letters = S.story.map(id => ({
+    id, lines: wrapText(STORY.find(x => x.id === id).line, W - 92, 12.5, F_SERIF) }));
+  let storyH = 0;
+  for (const l of letters) storyH += Math.max(36, l.lines.length*16 + 18);
+  const endLines = S.story.length === STORY.length
+    ? wrapText(STORY_END, W - 60, 12.5, F_SERIF) : null;
+  if (endLines) storyH += endLines.length*16 + 26;
+  if (!letters.length) storyH = 44;
+
+  const contentH = rows*ch + 210 + storyH;
+  const maxScroll = Math.max(0, contentH - (H - top) + 76);
   V.bookScroll = clamp(V.bookScroll, 0, maxScroll);
   const sc = V.bookScroll;
 
@@ -1745,17 +2080,50 @@ function drawBook(){
     }
   });
 
-  const oy = top + rows*ch - sc + 14;
-  txt('Oddments', W/2, oy, 13, MOR.ink2, F_SERIF);
-  CURIOS.forEach((c, i) => {
-    const x = 15 + (W-30)*(i + 0.5)/CURIOS.length, y = oy + 40;
-    if (S.odd[c.id]){
-      drawCurio(ctx, c.id, x, y, Math.min((W-30)/CURIOS.length*0.32, 15));
+  // ---- the ledge ----
+  let oy = top + rows*ch - sc + 16;
+  txt('The Ledge', W/2, oy, 13, MOR.ink2, F_SERIF);
+  DECOR.forEach((d, i) => {
+    const x = 15 + (W-30)*(i + 0.5)/DECOR.length, y = oy + 36;
+    if (S.decorFound[d.id]){
+      drawDecor(ctx, d.id, x, y, Math.min((W-30)/DECOR.length*0.34, 15));
+      if (S.decor.includes(d.id)){
+        ctx.fillStyle = MOR.ochre;
+        ctx.beginPath(); ctx.arc(x, y + 20, 2.4, 0, TAU); ctx.fill();   // currently out on the ledge
+      }
     } else {
       ctx.fillStyle = 'rgba(86,75,60,.07)';
       ctx.beginPath(); ctx.arc(x, y, 13, 0, TAU); ctx.fill();
     }
   });
+
+  // ---- the sender ----
+  oy += 76;
+  txt('The Sender', W/2, oy, 13, MOR.ink2, F_SERIF);
+  let ly = oy + 26;
+  if (!letters.length){
+    txt('Not everything in a parcel is a flower.', W/2, ly + 12, 12, 'rgba(86,75,60,.35)', F_SERIF);
+  } else {
+    for (const l of letters){
+      const h = Math.max(36, l.lines.length*16 + 18);
+      if (ly < H + 60 && ly > top - 80){
+        ctx.fillStyle = 'rgba(255,253,247,.45)';
+        rr(ctx, 15, ly, W - 30, h - 8, 8); ctx.fill();
+        ctx.strokeStyle = 'rgba(86,75,60,.12)'; ctx.lineWidth = 1; ctx.stroke();
+        drawCurio(ctx, l.id, 40, ly + (h-8)/2, 13);
+        l.lines.forEach((line, k) => {
+          ctx.font = 'italic 12.5px ' + F_SERIF;
+          ctx.fillStyle = MOR.ink2; ctx.textAlign = 'left';
+          ctx.fillText(line, 66, ly + 22 + k*16);
+        });
+        ctx.textAlign = 'center';
+      }
+      ly += h;
+    }
+    if (endLines){
+      endLines.forEach((line, k) => txt(line, W/2, ly + 18 + k*16, 12.5, MOR.ink3, F_SERIF));
+    }
+  }
   ctx.restore();
 
   const hg = ctx.createLinearGradient(0,0,0,top);
@@ -1763,7 +2131,8 @@ function drawBook(){
   ctx.fillStyle = hg; ctx.fillRect(0, 0, W, top);
   txt('The Herbarium', W/2, H*0.085, 17, MOR.ink, F_SERIF);
   txt(st.sp + '/' + st.spAll + ' species  ·  ' + st.cw + '/' + st.cwAll + ' colourways  ·  ' +
-      st.odd + '/' + st.oddAll + ' oddments', W/2, H*0.115, 10.5, MOR.ink3);
+      st.dec + '/' + st.decAll + ' ornaments  ·  ' + st.sto + '/' + st.stoAll + ' letters',
+      W/2, H*0.115, 10, MOR.ink3);
   hint(st.sp < st.spAll ? (st.spAll - st.sp) + ' species still unaccounted for.'
                         : 'Every species accounted for. The colourways, though…');
 }
@@ -1825,6 +2194,8 @@ function frame(ts){
 window.PP = { S, V, CFG, GES, SPECIES, VARIANTS, RARITY, CURIOS,
               save, openParcel, phenotype, harmony, bookStats,
               drawFlower, makeGenome, mulberry32, ctx, get W(){return W}, get H(){return H},
+              BONDS, BD, bondBetween, DECOR, STORY, storyDue, bondsAt, showSheet,
+              shelfGeom, ledgeGeom, slotAt, ledgeAt,
               reset(){ localStorage.removeItem(KEY); location.reload(); } };
 
 /* ---------- go ---------- */
