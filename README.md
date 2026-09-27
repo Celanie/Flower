@@ -123,6 +123,67 @@ stripe, cross) as well as a colour, because in a deliberately low-chroma
 palette, colour alone is a weak signal — and for a colour-blind player it is no
 signal at all.
 
+## Motion
+
+The lines **boil** — the outlines wobble the way hand-drawn animation does,
+because each frame was redrawn by hand. Two properties separate boil from
+noise, and both are easy to get wrong:
+
+- **It is stepped.** Real boil runs on 2s or 3s — about eight drawings a
+  second, not sixty. Perturbing every rendered frame looks like electrical
+  interference; holding each perturbation for ~125ms looks *drawn*.
+- **It cycles a small number of fixed drawings.** Three offset sets per vertex,
+  reused in order, so the eye reads "the same line, drawn again" rather than a
+  line permanently crawling.
+
+So there is a table of three fixed offset sets indexed by a clock ticking at
+`CFG.boil.fps`. Lookups are array reads returning no objects, because this runs
+a few thousand times a frame.
+
+What boils is the **figure, not the ground** — the same split as the palette,
+and the same convention as hand-drawn animation, where painted backgrounds hold
+still behind moving characters. Petals wobble along their outline; small shapes
+(leaves, centres, ornaments, parcels) shift as a whole, because that is what
+boil looks like at small scale. Amplitude tracks stroke width, which scales
+with flower size — a constant wobble shouts on a small flower and vanishes on a
+large one.
+
+The room's clouds and stars ride the same 8fps clock, so the whole scene
+updates on one cadence. Dust drifts in the window light at full frame rate,
+because stepped dust would read as a fault. `prefers-reduced-motion` holds every
+line still.
+
+## Performance
+
+Adding boil exposed something that had been true for three rounds of art
+changes and never measured: the game was repainting the entire static room —
+wall gradient, table gradient, light pool, vignette, grain — on every frame, for
+pixels identical 59 times out of 60. The table screen ran at **21fps** with boil
+switched off.
+
+Three fixes, in order of how much they returned:
+
+1. **The room is cached** to an offscreen canvas and redrawn only when its
+   inputs change (size, hour, the 8fps cloud tick). Grain bakes into that layer
+   and into the Herbarium's page layer instead of being a full-canvas pattern
+   fill per frame.
+2. **One gradient per petal ring, not per petal.** Gradient coordinates resolve
+   against the transform in force when the gradient is *used*, not when it is
+   created — so a single object rotates correctly with each petal. This removed
+   ~190 allocations per frame on a full sill.
+3. **The petal profile is cached.** The silhouette is sampled at fixed
+   positions, so it depends only on sample count and tip sharpness. Tabulated,
+   ~5000 `pow`/`sin` calls per frame become array reads. Small petals drop from
+   13 samples to 9.
+
+Measured in this repo's container, which has no GPU (software rasterisation, so
+treat these as a floor rather than a target): table 21 → 176fps, Herbarium
+22 → 48, a typical sill 16 → 50, a worst-case sill of nine 21-petal roses
+16 → 33. The boil itself costs about 1.5fps.
+
+`tests/boil.js` asserts frame-rate floors, because this regression hid for three
+rounds and nothing would have caught it.
+
 ## Legibility
 
 Everything on screen states what it is when you touch it. The three pills top
@@ -159,6 +220,7 @@ const CFG = {
   harmonyPerPair   : 0.06,        // sill bonus per matching neighbour pair
   harmonyCap       : 1.75,
   squeezeSeconds   : 1.15,        // hold-to-squeeze fill time
+  boil             : {fps: 8, frames: 3, amp: 0.95},  // hand-drawn line boil
 };
 ```
 
@@ -214,6 +276,7 @@ HTTP (`localStorage` and the tests' own fixtures do not behave on `file://`):
 ```
 python3 -m http.server 8899 &
 node tests/framework.js     # 50 assertions
+node tests/boil.js          # 9 assertions: boil cadence + frame-rate floors
 node tests/playthrough.js   # opens 16 parcels end to end
 ```
 

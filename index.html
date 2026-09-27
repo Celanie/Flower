@@ -139,6 +139,7 @@ const CFG = {
   storyAt          : [2, 7, 14, 23, 34, 47], // opens at which the sender writes again
   harmonyCap       : 2.00,
   squeezeSeconds   : 1.15,       // hold-to-squeeze fill time (the "pressure" substitute)
+  boil             : {fps: 8, frames: 3, amp: 0.95},  // hand-drawn line boil
 };
 
 /* ============================================================
@@ -176,6 +177,52 @@ function pet(h, sat, lit, a = 1){
   const l = clamp(lit, F_L[0], F_L[1]);
   const s = clamp(sat * (0.62 + 0.38*l/100), F_S[0], F_S[1]);
   return hsl(h, s, l, a);
+}
+
+/* ============================================================
+   LINE BOIL
+   Hand-drawn animation wobbles because each frame is redrawn by hand. Two
+   things make it read as a hand rather than as noise:
+
+   1. It is STEPPED. Real boil runs on 2s or 3s — eight drawings a second,
+      not sixty. Perturbing every rendered frame looks like electrical
+      interference; holding each perturbation for ~125ms looks drawn.
+   2. It CYCLES a few fixed drawings. Three offsets per vertex, reused in
+      order, so the eye reads "the same line, drawn again" rather than a
+      line permanently crawling.
+
+   So: a table of `frames` fixed offset sets, indexed by a clock that ticks
+   at `fps`. Lookups are table reads, not trig, and return no objects —
+   this runs a few thousand times a frame.
+   ============================================================ */
+const BOIL = { k: 0, on: true, tables: [] };
+const BOIL_N = 1024;
+let _bx = null, _by = null;
+function makeBoil(){
+  BOIL.on = !reduceMotion;
+  const r = mulberry32(20260927);
+  BOIL.tables = [];
+  for (let f = 0; f < CFG.boil.frames; f++){
+    const bx = new Float32Array(BOIL_N), by = new Float32Array(BOIL_N);
+    for (let i = 0; i < BOIL_N; i++){ bx[i] = r()*2 - 1; by[i] = r()*2 - 1; }
+    BOIL.tables.push([bx, by]);
+  }
+  _bx = BOIL.tables[0][0]; _by = BOIL.tables[0][1];
+}
+function boilTick(t){
+  if (!BOIL.on){ BOIL.k = 0; }
+  else BOIL.k = Math.floor(t * CFG.boil.fps) % CFG.boil.frames;
+  const tb = BOIL.tables[BOIL.k];
+  _bx = tb[0]; _by = tb[1];
+}
+const bX = i => _bx[i & (BOIL_N - 1)];
+const bY = i => _by[i & (BOIL_N - 1)];
+/* Small shapes do not wobble internally — the whole drawing lands a little
+   differently. Large outlines wobble along their length. Both are boil. */
+function boilShift(ctx, seed, amp = 1){
+  if (!BOIL.on) return;
+  const a = CFG.boil.amp * amp * UI.s;
+  ctx.translate(bX(seed)*a, bY(seed)*a);
 }
 
 /* paper grain — the thing that makes a flat fill feel like a printed page */
@@ -387,9 +434,10 @@ function potPath(ctx, x, y, k){
   ctx.lineTo(x +  9*k, y +  6*k); ctx.lineTo(x -  9*k, y +  6*k);
   ctx.closePath();
 }
-function drawPot(ctx, x, y, glazeIdx, k = 1){
+function drawPot(ctx, x, y, glazeIdx, k = 1, bseed = 0){
   const g = glazeIdx >= 0 ? GLAZES[glazeIdx] : POT_PLAIN;
   ctx.save();
+  boilShift(ctx, bseed + 500, 0.55);
   ctx.fillStyle = 'rgba(112,96,76,.13)';
   ctx.beginPath(); ctx.ellipse(x, y + 7*k, 12*k, 2.6*k, 0, 0, TAU); ctx.fill();
   ctx.fillStyle = g.body; potPath(ctx, x, y, k); ctx.fill();
@@ -555,6 +603,7 @@ function phenotype(g){
     center: sp.center,
     bend : r()*2 - 1,
     phase: r()*TAU,
+    bseed: Math.floor(r()*100000),
     hue, sat, lit,
   };
   phCache.set(key, ph);
@@ -569,21 +618,43 @@ function flowerName(g){
   return va + ' ' + sp;
 }
 
-function petalPath(ctx, L, Wd, curl, frill, split, sharp, j){
-  const N = 13;
-  ctx.beginPath(); ctx.moveTo(0, 0);
-  for (let s=1; s<=N; s++){
-    const u = s/N;
-    const base = Math.pow(Math.sin(u*Math.PI), sharp ? 1.7 : 0.72);
-    const rip  = 1 + frill*0.3*Math.sin(u*9 + j*6);
-    ctx.lineTo( Wd*base*rip*(1 - curl*0.45*u) + curl*Wd*0.55*Math.sin(u*Math.PI), -L*u );
+/* The petal silhouette is sampled at fixed positions, so its profile depends
+   only on the sample count and the tip sharpness — never on the flower. Cached,
+   it turns ~5000 pow+sin calls a frame into array reads. */
+const PROFILE = new Map();
+function profile(N, sharp){
+  const k = N * 2 + (sharp ? 1 : 0);
+  let p = PROFILE.get(k);
+  if (!p){
+    p = { base: new Float32Array(N+1), arc: new Float32Array(N+1) };
+    for (let i = 0; i <= N; i++){
+      const u = i/N;
+      p.base[i] = Math.pow(Math.sin(u*Math.PI), sharp ? 1.7 : 0.72);
+      p.arc[i]  = Math.sin(u*Math.PI);
+    }
+    PROFILE.set(k, p);
   }
-  if (split) ctx.lineTo(0, -L*0.83);
-  for (let s=N; s>=1; s--){
-    const u = s/N;
-    const base = Math.pow(Math.sin(u*Math.PI), sharp ? 1.7 : 0.72);
-    const rip  = 1 + frill*0.3*Math.sin(u*9 + j*6 + 2.1);
-    ctx.lineTo( -Wd*base*rip*(1 - curl*0.45*u) + curl*Wd*0.55*Math.sin(u*Math.PI), -L*u );
+  return p;
+}
+function petalPath(ctx, L, Wd, curl, frill, split, sharp, j, bs = 0, amp = 1){
+  // small petals do not need thirteen samples to read as the same shape
+  const N = L < 46 ? 9 : 13;
+  const P = profile(N, sharp);
+  const a = BOIL.on ? amp : 0;
+  const cw = curl*Wd*0.55;
+  ctx.beginPath(); ctx.moveTo(bX(bs)*a, bY(bs)*a);
+  for (let i = 1; i <= N; i++){
+    const u = i/N;
+    const rip = 1 + frill*0.3*Math.sin(u*9 + j*6);
+    ctx.lineTo( Wd*P.base[i]*rip*(1 - curl*0.45*u) + cw*P.arc[i] + bX(bs+i)*a,
+                -L*u + bY(bs+i)*a );
+  }
+  if (split) ctx.lineTo(bX(bs+40)*a, -L*0.83 + bY(bs+40)*a);
+  for (let i = N; i >= 1; i--){
+    const u = i/N;
+    const rip = 1 + frill*0.3*Math.sin(u*9 + j*6 + 2.1);
+    ctx.lineTo( -Wd*P.base[i]*rip*(1 - curl*0.45*u) + cw*P.arc[i] + bX(bs+60+i)*a,
+                -L*u + bY(bs+60+i)*a );
   }
   ctx.closePath();
 }
@@ -591,6 +662,7 @@ function petalPath(ctx, L, Wd, curl, frill, split, sharp, j){
 function drawCentre(ctx, ph, R, t){
   if (R <= 0.4) return;
   ctx.save();
+  boilShift(ctx, ph.bseed + 400, 0.7);
   if (ph.center === 'disc'){
     const g = ctx.createRadialGradient(0,0,R*0.15, 0,0,R);
     g.addColorStop(0, ph.cCen2); g.addColorStop(1, ph.cCen);
@@ -657,14 +729,22 @@ function drawStem(ctx, ph, R, t, len){
   const bend = ph.bend*R*0.42 + sway;
   ctx.save();
   ctx.strokeStyle = ph.stem; ctx.lineWidth = Math.max(1.6, R*0.075); ctx.lineCap='round';
-  ctx.beginPath(); ctx.moveTo(0,0);
-  ctx.quadraticCurveTo(bend, h*0.5, bend*0.25, h);
+  const a = BOIL.on ? CFG.boil.amp * UI.s : 0;
+  ctx.beginPath();
+  for (let i=0;i<=10;i++){                      // sampled, so the line can boil along it
+    const u = i/10, iu = 1-u;
+    const px = iu*iu*0 + 2*iu*u*bend + u*u*bend*0.25;
+    const py = iu*iu*0 + 2*iu*u*h*0.5 + u*u*h;
+    i ? ctx.lineTo(px + bX(ph.bseed+200+i)*a, py + bY(ph.bseed+200+i)*a)
+      : ctx.moveTo(px, py);
+  }
   ctx.stroke();
   ctx.fillStyle = ph.stem;
   for (let i=0;i<2;i++){
     const u = 0.42 + i*0.26, side = i%2 ? 1 : -1;
     const x = lerp(0, bend*0.25, u) + bend*0.5*(1-u)*u*2, y = h*u;
-    ctx.save(); ctx.translate(x,y); ctx.rotate(side*(0.85 + ph.jit[i]*0.2));
+    ctx.save(); ctx.translate(x,y); boilShift(ctx, ph.bseed + 300 + i);
+    ctx.rotate(side*(0.85 + ph.jit[i]*0.2));
     ctx.beginPath(); ctx.moveTo(0,0);
     ctx.quadraticCurveTo(R*0.34, -R*0.24, R*0.72, 0);
     ctx.quadraticCurveTo(R*0.34,  R*0.24, 0, 0);
@@ -682,10 +762,19 @@ function drawFlower(ctx, ph, x, y, R, bloom = 1, t = 0, opts = {}){
   if (ph.mu === 'invert') ctx.scale(1, -1);
   if (ph.mu === 'glow'){ ctx.shadowColor = ph.cA; ctx.shadowBlur = R*0.55*bloom; }
 
+  // The wobble has to track the line weight, or it shouts on a small flower and
+  // disappears on a big one. Stroke width scales with R, so the boil does too.
+  const bamp = CFG.boil.amp * UI.s * clamp(0.55 + R/110, 0.6, 1.9);
   const rings = ph.mu === 'double' ? 2 : 1;
   for (let ring = rings-1; ring >= 0; ring--){
     const rs  = ring ? 0.72 : 1;
     const off = ring ? Math.PI/ph.n : 0;
+    // Gradient coordinates resolve against the transform in force when the
+    // gradient is USED, not when it is made — so one object per ring rotates
+    // with each petal, instead of allocating one per petal per frame.
+    const Lnom = R*ph.len*rs;
+    const grad = ctx.createLinearGradient(0, 0, 0, -Lnom);
+    grad.addColorStop(0, ph.cB); grad.addColorStop(0.55, ph.cA); grad.addColorStop(1, ph.cEdge);
     for (let i=0;i<ph.n;i++){
       const grow = clamp(bloom*1.3 - (i/ph.n)*0.22, 0, 1);
       if (grow <= 0.01) continue;
@@ -694,11 +783,10 @@ function drawFlower(ctx, ph, x, y, R, bloom = 1, t = 0, opts = {}){
       ctx.rotate(off + i/ph.n*TAU + ph.jit[i]*0.1 + (1-ease)*0.8);
       const L  = R*ph.len*rs*(0.3 + 0.7*ease)*(1 + ph.jit[i]*0.055);
       const Wd = R*ph.wid*rs*(0.45 + 0.55*ease);
-      const g = ctx.createLinearGradient(0, 0, 0, -L);
-      g.addColorStop(0, ph.cB); g.addColorStop(0.55, ph.cA); g.addColorStop(1, ph.cEdge);
-      ctx.fillStyle = g;
+      ctx.fillStyle = grad;
       ctx.globalAlpha = ph.mu === 'glass' ? 0.55 : (ring ? 0.92 : 1);
-      petalPath(ctx, L, Wd, ph.curl, ph.frill, ph.split, ph.sharp, ph.jit[i]);
+      petalPath(ctx, L, Wd, ph.curl, ph.frill, ph.split, ph.sharp, ph.jit[i],
+                ph.bseed + i*131 + ring*47, bamp);
       ctx.fill();
       ctx.globalAlpha = 1;
       ctx.strokeStyle = ph.mu === 'glass' ? 'rgba(255,253,246,.8)' : ph.cLine;
@@ -717,6 +805,7 @@ function drawFlower(ctx, ph, x, y, R, bloom = 1, t = 0, opts = {}){
 
 function drawDecor(ctx, id, x, y, R){
   ctx.save(); ctx.translate(x, y);
+  boilShift(ctx, (id.charCodeAt(0)*37 + id.length*11) + 700, 0.8);
   ctx.strokeStyle = 'rgba(86,75,60,.38)'; ctx.lineWidth = 1.1;
   if (id === 'bell'){
     ctx.fillStyle = '#BE9F63';
@@ -775,6 +864,7 @@ function drawDecor(ctx, id, x, y, R){
 
 function drawCurio(ctx, id, x, y, R){
   ctx.save(); ctx.translate(x,y);
+  boilShift(ctx, (id.charCodeAt(0)*53 + id.length*7) + 900, 0.8);
   const ink = '#4A4238';
   if (id === 'frog'){
     ctx.fillStyle = '#8A9C76';
@@ -833,6 +923,7 @@ function drawBody(ctx, P, box, st, t){
   ctx.save();
   ctx.globalAlpha = st.alpha ?? 1;
   ctx.translate(cx, cy);
+  boilShift(ctx, (st.bseed || 0) + 11, 0.85);
   if (st.shake) ctx.translate((Math.random()-0.5)*st.shake, (Math.random()-0.5)*st.shake);
   ctx.scale(1 + sq*0.09, 1 - sq*0.055);
   ctx.translate(-cx, -cy);
@@ -1825,7 +1916,7 @@ function skyColors(){
   if (h < 20) return ['#EBD4BA','#DFD9D2','dusk'];
   return ['#B8C0C6','#D6D7D2','night'];
 }
-function drawBackdrop(kind){
+function paintRoom(ctx, kind){
   const [s1, s2, when] = skyColors();
   const wg = ctx.createLinearGradient(0, 0, 0, H);
   wg.addColorStop(0, '#DAD5CA'); wg.addColorStop(0.58, MOR.wall); wg.addColorStop(1, MOR.wallLo);
@@ -1885,7 +1976,6 @@ function drawBackdrop(kind){
     tg.addColorStop(0, MOR.wood); tg.addColorStop(1, MOR.woodDk);
     ctx.fillStyle = tg; ctx.fillRect(0, H*0.53, W, H*0.47);
     ctx.fillStyle = 'rgba(69,62,52,.18)'; ctx.fillRect(0, H*0.53, W, 1.5);
-    // the pool of light coming in through the window
     // a soft pool rather than a trapezoid — the straight edges read as a shape
     const pool = ctx.createRadialGradient(W/2, H*0.56, W*0.06, W/2, H*0.62, W*0.78);
     pool.addColorStop(0, 'rgba(255,251,238,.34)'); pool.addColorStop(1, 'rgba(255,251,238,0)');
@@ -1899,6 +1989,49 @@ function drawBackdrop(kind){
   const vg = ctx.createRadialGradient(W/2, H*0.42, H*0.2, W/2, H*0.5, H*0.8);
   vg.addColorStop(0, 'rgba(122,106,86,0)'); vg.addColorStop(1, 'rgba(122,106,86,.2)');
   ctx.fillStyle = vg; ctx.fillRect(0, 0, W, H);
+}
+
+
+/* The room is repainted only when something about it changes. It was costing a
+   full-canvas wall gradient, a table gradient, a light pool, a vignette and a
+   grain pass on every single frame, for pixels that were identical 59 times out
+   of 60. Clouds and stars ride the same 8fps clock as the line boil, which is
+   also how hand-drawn backgrounds move. */
+const room = { key: '', cv: null, cx: null };
+function drawBackdrop(kind){
+  const w = Math.round(W*DPR), h = Math.round(H*DPR);
+  const key = [kind, w, h, new Date().getHours(),
+               reduceMotion ? 0 : Math.floor(V.t * CFG.boil.fps)].join('|');
+  if (room.key !== key){
+    if (!room.cv) room.cv = document.createElement('canvas');
+    if (room.cv.width !== w || room.cv.height !== h){
+      room.cv.width = w; room.cv.height = h;
+      room.cx = room.cv.getContext('2d');
+    }
+    room.cx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    room.cx.clearRect(0, 0, W, H);
+    room.cx.lineJoin = 'round'; room.cx.lineCap = 'round';
+    paintRoom(room.cx, kind);
+    if (grainPat){ room.cx.fillStyle = grainPat; room.cx.fillRect(0, 0, W, H); }
+    room.key = key;
+  }
+  ctx.drawImage(room.cv, 0, 0, W, H);
+  if (kind === 'table' && !reduceMotion) drawDust();
+}
+function drawDust(){
+  ctx.save();
+    // dust hanging in the window light. Drift is two slow sines rather than a
+    // scroll, so nothing ever wraps and the specks simply hover.
+      const dr = mulberry32(3131);
+      for (let i = 0; i < 18; i++){
+        const sp = 0.5 + dr()*0.9, rad = 0.8 + dr()*1.4;
+        const x = W*(0.16 + dr()*0.68) + Math.sin(V.t*0.16*sp + i*1.3)*W*0.045;
+        const y = H*(0.32 + dr()*0.52) + Math.sin(V.t*0.11*sp + i*2.2)*H*0.05;
+        const tw = 0.22 + 0.78*Math.abs(Math.sin(V.t*0.5*sp + i*2.1));
+        ctx.fillStyle = `rgba(255,253,243,${tw*0.55})`;
+        ctx.beginPath(); ctx.arc(x, y, rad, 0, TAU); ctx.fill();
+      }
+  ctx.restore();
 }
 
 /* ============================================================
@@ -1917,7 +2050,7 @@ function drawTable(){
       order.forEach((sl, i) => {
         const P = PARCELS.find(x => x.id === look[i]) || PARCELS[i];
         const o = spots[sl];
-        drawBody(ctx, P, { cx: W/2 + o.dx, cy: H*0.7 + o.dy, w: o.s, h: o.s }, {}, V.t);
+        drawBody(ctx, P, { cx: W/2 + o.dx, cy: H*0.7 + o.dy, w: o.s, h: o.s }, { bseed: i*61 }, V.t);
       });
       if (S.specialPending){
         const bx = W/2 + 84, by = H*0.575;
@@ -2048,7 +2181,7 @@ function drawShelf(){
     if (fl && !lifted){
       drawFlower(ctx, phenotype(fl), s.x, s.y - g.dy*0.52, Math.min(g.dx*0.34, 35), 1, V.t + i,
                  { stemLen: g.dy*0.44, sway: 0.6 });
-      drawPot(ctx, s.x, s.y, hm.glazeOf[i], 1.35);
+      drawPot(ctx, s.x, s.y, hm.glazeOf[i], 1.35, i*23);
     } else {
       const live = V.placing === 'flower' || lifted || hoverSlot === i;
       ctx.strokeStyle = live ? `rgba(152,124,62,${0.6 + Math.sin(V.t*4 + i)*0.28})`
@@ -2175,10 +2308,25 @@ function bookHit(p){
   return null;
 }
 
+const page = { key: '', cv: null, cx: null };
+function drawPageBg(){
+  const w = Math.round(W*DPR), h = Math.round(H*DPR), key = w + 'x' + h;
+  if (page.key !== key){
+    if (!page.cv) page.cv = document.createElement('canvas');
+    page.cv.width = w; page.cv.height = h;
+    page.cx = page.cv.getContext('2d');
+    page.cx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    const bg = page.cx.createLinearGradient(0,0,0,H);
+    bg.addColorStop(0, MOR.card); bg.addColorStop(1, '#EDE7D9');
+    page.cx.fillStyle = bg; page.cx.fillRect(0,0,W,H);
+    if (grainPat){ page.cx.fillStyle = grainPat; page.cx.fillRect(0,0,W,H); }
+    page.key = key;
+  }
+  ctx.drawImage(page.cv, 0, 0, W, H);
+}
+
 function drawBook(){
-  const bg = ctx.createLinearGradient(0,0,0,H);
-  bg.addColorStop(0, MOR.card); bg.addColorStop(1, '#EDE7D9');
-  ctx.fillStyle = bg; ctx.fillRect(0,0,W,H);
+  drawPageBg();
 
   const st = bookStats(), L = bookLayout();
   V.bookScroll = clamp(V.bookScroll, 0, L.maxScroll);
@@ -2321,11 +2469,8 @@ function frame(ts){
   if (V.noteT > 0){ V.noteT -= dt; if (V.noteT <= 0) elToast.style.opacity = 0; }
   saveT += dt; if (saveT > 8){ saveT = 0; save(); }
 
-  ctx.lineJoin = 'round'; ctx.lineCap = 'round';
-  if (V.screen === 'table') drawTable();
-  else if (V.screen === 'shelf') drawShelf();
-  else drawBook();
-  if (grainPat){ ctx.fillStyle = grainPat; ctx.fillRect(0, 0, W, H); }
+  boilTick(V.t);
+  paint();
 
   requestAnimationFrame(frame);
 }
@@ -2336,11 +2481,20 @@ window.PP = { S, V, CFG, GES, SPECIES, VARIANTS, RARITY, CURIOS,
               drawFlower, makeGenome, mulberry32, ctx, get W(){return W}, get H(){return H},
               BONDS, BD, bondBetween, DECOR, STORY, storyDue, bondsAt, showSheet, flowerName, bookLayout,
               shelfGeom, ledgeGeom, slotAt, ledgeAt,
+              BOIL, boilTick, paint,
               reset(){ localStorage.removeItem(KEY); location.reload(); } };
+
+function paint(){
+  ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+  if (V.screen === 'table') drawTable();
+  else if (V.screen === 'shelf') drawShelf();
+  else drawBook();
+}
 
 /* ---------- go ---------- */
 resize();
 makeGrain(ctx);
+makeBoil();
 dayCheck();
 accrue();
 updateHUD();
