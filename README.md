@@ -114,9 +114,32 @@ Four rules do most of the work:
   because a pass that muted everything equally collapsed into one flat beige
   with nothing for the eye to hold.
 
-Supporting the above: outlines are pencil (`rgba(86,75,60,.42)`) rather than a
-darker shade of the fill, which is most of what separates a hand-drawn look
-from a vector one; and a procedural paper grain is tiled over every frame.
+**Nothing is outlined.** The flowers, parcels, ornaments and pots are painted
+shapes — gouache, not ink-and-wash. Outlines and boil fight each other: a
+boiling outline pulls the eye to the *edge*, where an unlined shape reads as one
+form redrawn. `CFG.outlines` flips the whole game back to ink if you want to
+compare.
+
+Removing them means something else has to do the separating, and the answer is
+two rules working together:
+
+- **Directional light** — each petal is shaded by where it points, from
+  `CFG.lightAngle`. This separates one side of a flower from the other.
+- **Alternating tone** — odd and even petals differ by about 7 in lightness.
+  This is the one that matters, and the first pass missed it: neighbouring
+  petals point almost the same way, so directional light cannot separate them,
+  and a twenty-petal daisy fuses into a disc. Alternating tone is the old
+  illustrator's answer, and it makes the petals read as petals.
+
+Both fold into seven quantised shades per petal ring rather than a gradient per
+petal, so the shading is nearly free. A soft cast shadow behind each bloom does
+the other job an outline used to: it seats the flower against the ground without
+drawing a line around it.
+
+Strokes that *are* the form — thread on a cocoon, a snail's spiral, a candle
+wick, the netting on a glass float, stems — are not outlines and stay. The
+`outline()` helper marks the difference in one place. A procedural paper grain
+is tiled over the cached background layers.
 
 Accessibility note: each glaze carries a **distinct relief mark** (band, dots,
 stripe, cross) as well as a colour, because in a deliberately low-chroma
@@ -183,6 +206,10 @@ treat these as a floor rather than a target): table 21 → 176fps, Herbarium
 
 `tests/boil.js` asserts frame-rate floors, because this regression hid for three
 rounds and nothing would have caught it.
+
+Dropping the outlines afterwards gave the numbers back a second time — two fewer
+draw operations per petal — taking a typical sill from 50 to 64fps and the
+Herbarium from 46 to 59.
 
 ## Legibility
 
@@ -275,7 +302,7 @@ HTTP (`localStorage` and the tests' own fixtures do not behave on `file://`):
 
 ```
 python3 -m http.server 8899 &
-node tests/framework.js     # 50 assertions
+node tests/framework.js     # 52 assertions
 node tests/boil.js          # 9 assertions: boil cadence + frame-rate floors
 node tests/playthrough.js   # opens 16 parcels end to end
 ```
@@ -283,7 +310,8 @@ node tests/playthrough.js   # opens 16 parcels end to end
 `tests/framework.js` covers the bond tiers, scoring (shelf accord, full sill,
 the cap), drag-to-rearrange versus tap-to-inspect, ledge hit-testing and
 placement, letter pacing, both non-flower sheet paths, the v1→v2 save
-migration, the explanatory pills, name uniqueness, and — across four viewport
+migration, the explanatory pills, name uniqueness, gesture progress landing
+exactly on its end, and — across four viewport
 sizes from 360×640 to 520×1180 — that the wheel scrolls the Herbarium, that the
 foot of its page lands above the hint and tab bar, and that scrolling clamps at
 the top. `tests/playthrough.js` opens sixteen parcels, performing every

@@ -145,6 +145,45 @@ const T = (name, cond, extra='') => (cond ? ok : bad).push(name + (extra ? ' :: 
   T('letter shows its line', /No note\. No door\./.test(ss.poem), JSON.stringify(ss.poem));
   await page.click('#bBook'); await page.waitForTimeout(300);
 
+  // ---------- 4c. a gesture driven EXACTLY to its end must complete ----------
+  // Accumulated progress lands on 0.9999999999; a player who drags the tape to
+  // its end and no further would otherwise be stuck forever.
+  {
+    const pg = await b.newPage({ viewport: { width: 420, height: 860 } });
+    pg.on('pageerror', e => errs.push(e.message));
+    await pg.goto('http://127.0.0.1:8899/index.html');
+    await pg.click('#bStart'); await pg.waitForTimeout(400);
+    let peeled = null;
+    for (let n = 0; n < 40 && !peeled; n++){
+      const st = await pg.evaluate(() => {
+        PP.S.mail = 5;
+        if (PP.V.mode !== 'unwrap') PP.openParcel();
+        const L = PP.V.layers.find(l => l.kind === 'peel');
+        return L ? { a: L.a, b: L.b, first: PP.V.layers[0].kind } : null;
+      });
+      if (st && st.first === 'peel') peeled = st;
+      else await pg.evaluate(() => { PP.V.layers.forEach(l => l.p = 1); PP.V.mode = 'idle'; });
+      await pg.waitForTimeout(60);
+    }
+    if (!peeled) { T('found a peel parcel to test', false); }
+    else {
+      await pg.mouse.move(peeled.a.x, peeled.a.y);
+      await pg.mouse.down();
+      for (let i = 1; i <= 30; i++)                    // lands exactly on b, never past it
+        await pg.mouse.move(peeled.a.x + (peeled.b.x - peeled.a.x)*i/30,
+                            peeled.a.y + (peeled.b.y - peeled.a.y)*i/30);
+      await pg.mouse.up();
+      await pg.waitForTimeout(150);
+      const r = await pg.evaluate(() => {
+        const L = PP.V.layers.find(l => l.kind === 'peel');
+        return { p: L.p, done: L.p >= 1, active: PP.V.layers.findIndex(l => l.p < 0.999) };
+      });
+      T('an exact drag to the end completes the layer', r.done, 'p = ' + r.p);
+      T('and the next layer becomes active', r.active !== 0, 'active index ' + r.active);
+    }
+    await pg.close();
+  }
+
   // ---------- 5. story pacing ----------
   const story = await page.evaluate(() => {
     PP.S.story = []; PP.S.opened = 0;
