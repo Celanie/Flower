@@ -42,7 +42,7 @@ const T = (name, cond, extra='') => (cond ? ok : bad).push(name + (extra ? ' :: 
   // ---------- 2. tiers pay differently, shelf accord + full sill stack ----------
   const scoring = await page.evaluate(() => {
     const mk = (sp, va, seed) => ({ sp, va, ra:'common', mu:null, seed });
-    const set = a => { PP.S.sill = a; return PP.harmony(); };
+    const set = a => { PP.S.sill = a.map(x => x && PP.newFlower(x)); return PP.harmony(); };
     const blank = new Array(9).fill(null);
     const echo = set([mk('moon','dawn',1), mk('night','dawn',2), ...blank.slice(2)]);
     const kin  = set([mk('moon','dawn',1), mk('moon','ink',2),   ...blank.slice(2)]);
@@ -62,13 +62,13 @@ const T = (name, cond, extra='') => (cond ? ok : bad).push(name + (extra ? ' :: 
   await page.evaluate(() => {
     const mk = (sp, va, seed) => ({ sp, va, ra:'common', mu:null, seed });
     PP.S.sill = new Array(9).fill(null);
-    PP.S.sill[0] = mk('moon','dawn',11);     // slot 0
-    PP.S.sill[4] = mk('moon','ink',12);      // slot 4, not adjacent to 0
+    PP.S.sill[0] = PP.newFlower(mk('moon','dawn',11));     // slot 0
+    PP.S.sill[4] = PP.newFlower(mk('moon','ink',12));      // slot 4, not adjacent to 0
     PP.V.placing = false;
   });
   await page.click('#tabs button[data-s="shelf"]'); await page.waitForTimeout(350);
   const before = await page.evaluate(() => ({ b: PP.harmony().bonds.length,
-                                              s: PP.S.sill.map(x => x ? x.seed : null) }));
+                                              s: PP.S.sill.map(x => x ? x.g.seed : null) }));
   const pts = await page.evaluate(() => {
     const g = PP.shelfGeom();
     return { from: g.slot(4), to: g.slot(1) };     // drag centre up to slot 1, beside slot 0
@@ -81,7 +81,7 @@ const T = (name, cond, extra='') => (cond ? ok : bad).push(name + (extra ? ' :: 
   await page.mouse.up();
   await page.waitForTimeout(250);
   const after = await page.evaluate(() => ({ b: PP.harmony().bonds.length,
-                                             s: PP.S.sill.map(x => x ? x.seed : null),
+                                             s: PP.S.sill.map(x => x ? x.g.seed : null),
                                              m: PP.harmony().mult }));
   T('drag moved the flower', after.s[1] === 12 && after.s[4] === null,
     JSON.stringify(before.s) + ' -> ' + JSON.stringify(after.s));
@@ -91,7 +91,7 @@ const T = (name, cond, extra='') => (cond ? ok : bad).push(name + (extra ? ' :: 
   // a tap must inspect, not drag
   await page.mouse.click(pts.to.x, pts.to.y - 2);
   await page.waitForTimeout(200);
-  const tapped = await page.evaluate(() => ({ s: PP.S.sill.map(x => x ? x.seed : null),
+  const tapped = await page.evaluate(() => ({ s: PP.S.sill.map(x => x ? x.g.seed : null),
                                               toast: document.getElementById('toast').textContent }));
   T('tap inspects rather than moves', tapped.s[1] === 12, JSON.stringify(tapped.s));
   T('tap names the bond', /Kin/.test(tapped.toast), JSON.stringify(tapped.toast));
@@ -184,6 +184,90 @@ const T = (name, cond, extra='') => (cond ? ok : bad).push(name + (extra ? ' :: 
     await pg.close();
   }
 
+  // ---------- 4d. the life of a flower ----------
+  {
+    const pg = await b.newPage({ viewport: { width: 420, height: 860 } });
+    pg.on('pageerror', e => errs.push(e.message));
+    await pg.goto('http://127.0.0.1:8899/index.html');
+    await pg.click('#bStart'); await pg.waitForTimeout(400);
+
+    // life is spent by opening parcels, never by the clock
+    const life = await pg.evaluate(() => {
+      const r = PP.mulberry32(5);
+      PP.S.sill = new Array(9).fill(null);
+      PP.S.sill[0] = PP.newFlower({sp:'moon', va:'dawn', ra:'common', mu:null, seed:1});
+      const start = PP.S.sill[0].life;
+      const never = () => 1;                     // an rng that never rolls under illChance
+      for (let i = 0; i < 5; i++) PP.ageSill(never);
+      const after = PP.S.sill[0].life;
+      PP.resolveSill();                          // wall clock alone must do nothing
+      return { start, after, stillThere: !!PP.S.sill[0], st: PP.S.sill[0] && PP.S.sill[0].st };
+    });
+    T('life is spent in parcels', life.after === life.start - 5, `${life.start} -> ${life.after}`);
+    T('the clock alone does not age a healthy flower', life.stillThere && life.st === 'ok');
+
+    // at the end of its life it wilts, and after the window is pressed into the book
+    const spent = await pg.evaluate(() => {
+      PP.S.book = {}; PP.S.sill = new Array(9).fill(null);
+      const f = PP.newFlower({sp:'sun', va:'dawn', ra:'common', mu:null, seed:2});
+      f.life = 1; PP.S.sill[0] = f;
+      PP.ageSill(() => 1);
+      const wilted = f.st;
+      f.t0 = Date.now() - (PP.CFG.wiltHours*3600e3 + 1000);
+      const out = PP.resolveSill();
+      return { wilted, out, slot: PP.S.sill[0], inBook: !!PP.S.book['sun'] };
+    });
+    T('a flower at the end of its life wilts', spent.wilted === 'wilt', spent.wilted);
+    T('a spent flower is pressed into the book', spent.inBook && spent.out.pressed === 1,
+      JSON.stringify(spent.out));
+    T('and frees its pot', spent.slot === null);
+
+    // illness ends differently: the flower is lost and does NOT reach the book
+    const died = await pg.evaluate(() => {
+      PP.S.book = {}; PP.S.sill = new Array(9).fill(null);
+      const f = PP.newFlower({sp:'velvet', va:'dawn', ra:'common', mu:null, seed:3});
+      f.st = 'ill'; f.t0 = Date.now() - (PP.CFG.illHours*3600e3 + 1000);
+      PP.S.sill[0] = f;
+      const out = PP.resolveSill();
+      return { out, slot: PP.S.sill[0], inBook: !!PP.S.book['velvet'] };
+    });
+    T('an untreated illness is lost', died.out.lost === 1 && died.slot === null, JSON.stringify(died.out));
+    T('and does NOT reach the book', died.inBook === false);
+
+    // a tonic cures illness, costs one, and cannot be spent from an empty shelf
+    const cure = await pg.evaluate(() => {
+      PP.S.sill = new Array(9).fill(null);
+      const f = PP.newFlower({sp:'fog', va:'dawn', ra:'common', mu:null, seed:4});
+      f.st = 'ill'; f.t0 = Date.now(); f.life = 2; PP.S.sill[0] = f;
+      PP.S.tonics = 1;
+      const ok = PP.useTonic(0);
+      const afterSt = f.st, afterLife = f.life, left = PP.S.tonics;
+      f.st = 'ill'; f.t0 = Date.now();
+      const second = PP.useTonic(0);            // none left
+      return { ok, afterSt, afterLife, left, second };
+    });
+    T('a tonic cures illness', cure.ok && cure.afterSt === 'ok', JSON.stringify(cure));
+    T('a tonic restores life',  cure.afterLife >= Math.round(25*0.8), 'life ' + cure.afterLife);
+    T('a tonic is consumed', cure.left === 0);
+    T('a tonic cannot be spent when you have none', cure.second === false);
+
+    // a fading flower is worth less to the arrangement than a healthy one
+    const weight = await pg.evaluate(() => {
+      const mk = s => PP.newFlower({sp:'moon', va:'dawn', ra:'common', mu:null, seed:s});
+      PP.S.sill = new Array(9).fill(null); PP.S.decor = [null,null,null];
+      PP.S.sill[0] = mk(7); PP.S.sill[1] = mk(8);
+      const healthy = PP.harmony().mult;
+      PP.S.sill[1].st = 'wilt';
+      PP.S.sill[1].t0 = Date.now() - PP.CFG.wiltHours*3600e3*0.9;   // nearly gone
+      const faded = PP.harmony().mult;
+      return { healthy, faded, vig: PP.vigour(PP.S.sill[1]) };
+    });
+    T('a fading flower weakens its bond', weight.faded < weight.healthy,
+      `${weight.healthy.toFixed(3)} -> ${weight.faded.toFixed(3)} (vigour ${weight.vig.toFixed(2)})`);
+    T('but never to nothing', weight.faded > 1, weight.faded.toFixed(3));
+    await pg.close();
+  }
+
   // ---------- 5. story pacing ----------
   const story = await page.evaluate(() => {
     PP.S.story = []; PP.S.opened = 0;
@@ -222,7 +306,7 @@ const T = (name, cond, extra='') => (cond ? ok : bad).push(name + (extra ? ' :: 
   const migrated = await page.evaluate(() => ({ v: PP.S.v, story: PP.S.story,
                                                 decor: PP.S.decor, streak: PP.S.streak,
                                                 odd: PP.S.odd }));
-  T('v1 save migrates to v2', migrated.v === 2, 'v=' + migrated.v);
+  T('v1 save migrates to the current version', migrated.v === 3, 'v=' + migrated.v);
   T('old oddments become letters, in order', JSON.stringify(migrated.story) === '["key","frog"]',
     JSON.stringify(migrated.story));
   T('ledge initialised on migration', Array.isArray(migrated.decor) && migrated.decor.length === 3);

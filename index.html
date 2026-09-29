@@ -95,6 +95,7 @@ body.sheeting #tabs{opacity:0;pointer-events:none}
       <div class="pill" id="pMail">✉ <b>0</b></div>
       <div class="pill" id="pHarm">❀ ×1.0</div>
       <div class="pill" id="pStreak">✿ 1</div>
+      <div class="pill" id="pTonic">✚ 1</div>
     </div>
     <nav id="tabs">
       <button data-s="table" class="on">Table</button>
@@ -126,9 +127,24 @@ body.sheeting #tabs{opacity:0;pointer-events:none}
    TUNING — everything addictive lives in this block.
    ============================================================ */
 const CFG = {
-  parcelIntervalMs : 90 * 1000,  // one parcel accrues this often while you are away
-  parcelCap        : 8,          // accrual stops here, so nothing is ever "wasted"
+  // --- the post ---
+  parcelIntervalMs : 300 * 1000, // one parcel accrues this often while you are away
+  parcelCap        : 5,          // accrual stops here, so nothing is ever "wasted"
   startParcels     : 3,
+
+  // --- the life of a flower ---
+  // Life is spent in PARCELS, so time away never consumes it. Only once a
+  // flower is on its way out does the wall clock take over, and then only for
+  // a short window. A fortnight away can cost you the few that were already
+  // fading; it can never cost you the shelf.
+  flowerLife       : 25,         // parcels a healthy flower lasts
+  lifeSpread       : 0.22,       // +/- variance, so a sill does not expire in unison
+  wiltHours        : 20,         // spent -> pressed into the book, preserved
+  illHours         : 8,          // ill  -> dies, and is NOT preserved
+  illChance        : 0.005,      // per healthy flower, per parcel opened
+  wiltFloor        : 0.35,       // what a fading flower still contributes
+  tonicChance      : 0.018,      // parcels holding a tonic
+  tonicStart       : 1,
   pityAt           : 7,          // a Rare+ is guaranteed within this many opens
   curioChance      : 0.055,      // chance the parcel holds something that is not a flower
   bond             : {kin:0.12, counter:0.10, tone:0.09, echo:0.06}, // per bonded pair
@@ -781,6 +797,7 @@ function drawFlower(ctx, ph, x, y, R, bloom = 1, t = 0, opts = {}){
   ctx.save();
   ctx.translate(x, y);
   if (opts.stem !== false) drawStem(ctx, ph, R, t, opts.stemLen);
+  if (opts.droop) ctx.rotate(ph.bend*0.5*opts.droop);   // a fading head hangs
   if (!reduceMotion) ctx.rotate(Math.sin(t*0.85 + ph.phase)*0.035*(opts.sway ?? 1));
   if (ph.mu === 'invert') ctx.scale(1, -1);
   if (ph.mu === 'glow'){ ctx.shadowColor = ph.cA; ctx.shadowBlur = R*0.55*bloom; }
@@ -844,6 +861,33 @@ function drawFlower(ctx, ph, x, y, R, bloom = 1, t = 0, opts = {}){
   }
   ctx.shadowBlur = 0;
   drawCentre(ctx, ph, R*0.3*bloom, t);
+  ctx.restore();
+}
+
+function drawTonic(ctx, x, y, R){
+  ctx.save(); ctx.translate(x, y);
+  boilShift(ctx, 1234, 0.8);
+  ctx.fillStyle = '#8E7A5C';                                  // cork
+  rr(ctx, -R*0.17, -R*0.98, R*0.34, R*0.3, R*0.06); ctx.fill();
+  const g = ctx.createLinearGradient(-R*0.45, 0, R*0.45, 0);  // amber glass
+  g.addColorStop(0, '#9C7A52'); g.addColorStop(0.35, '#C79E66');
+  g.addColorStop(0.55, '#BE9464'); g.addColorStop(1, '#8E6D48');
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.moveTo(-R*0.16, -R*0.7); ctx.lineTo(-R*0.16, -R*0.5);
+  ctx.quadraticCurveTo(-R*0.52, -R*0.24, -R*0.52, R*0.3);
+  ctx.quadraticCurveTo(-R*0.52, R*0.8, -R*0.2, R*0.8);
+  ctx.lineTo(R*0.2, R*0.8);
+  ctx.quadraticCurveTo(R*0.52, R*0.8, R*0.52, R*0.3);
+  ctx.quadraticCurveTo(R*0.52, -R*0.24, R*0.16, -R*0.5);
+  ctx.lineTo(R*0.16, -R*0.7); ctx.closePath();
+  ctx.fill(); outline(ctx);
+  ctx.fillStyle = 'rgba(255,252,242,.34)';                    // highlight
+  rr(ctx, -R*0.36, -R*0.12, R*0.12, R*0.6, R*0.06); ctx.fill();
+  ctx.fillStyle = '#EFE7D6';                                  // label
+  rr(ctx, -R*0.4, R*0.04, R*0.8, R*0.36, R*0.05); ctx.fill();
+  ctx.fillStyle = 'rgba(86,75,60,.45)';
+  for (let i=0;i<2;i++) rr(ctx, -R*0.28, R*0.13 + i*R*0.12, R*0.56, R*0.05, R*0.02), ctx.fill();
   ctx.restore();
 }
 
@@ -1465,8 +1509,15 @@ addEventListener('orientationchange', () => setTimeout(resize, 120));
    STATE + SAVE
    ============================================================ */
 const KEY = 'parcel-petal-v1';
+/* A slot holds {g, life, st, t0}: the genome, parcels of life left, its state
+   ('ok' | 'wilt' | 'ill') and when that state began. */
+function newFlower(g, r){
+  const v = r ? (1 - CFG.lifeSpread + 2*CFG.lifeSpread*r()) : 1;
+  return { g, life: Math.round(CFG.flowerLife * v), st: 'ok', t0: 0 };
+}
 function fresh(){
-  return { v:2, mail:CFG.startParcels, lastAccrual:Date.now(), pity:0, opened:0,
+  return { v:3, mail:CFG.startParcels, lastAccrual:Date.now(), pity:0, opened:0,
+           tonics:CFG.tonicStart, lost:0, pressed:0,
            sill:new Array(9).fill(null), book:{},
            decor:new Array(3).fill(null),   // the ledge
            decorFound:{}, story:[],          // ornaments seen; story ids, in arrival order
@@ -1477,7 +1528,7 @@ try {
   const raw = localStorage.getItem(KEY);
   if (raw){
     const o = JSON.parse(raw);
-    if (o && (o.v === 1 || o.v === 2)){
+    if (o && o.v >= 1 && o.v <= 3){
       S = Object.assign(fresh(), o);
       if (o.v === 1){                       // v1 kept one undifferentiated "oddments" bag
         S.story = STORY.filter(x => o.odd && o.odd[x.id]).map(x => x.id);
@@ -1489,6 +1540,12 @@ try {
       if (!Array.isArray(S.decor) || S.decor.length !== 3) S.decor = new Array(3).fill(null);
       if (!Array.isArray(S.story)) S.story = [];
       if (!S.decorFound) S.decorFound = {};
+      if (!(o.v >= 3)){                  // slots used to hold a bare genome
+        S.sill = S.sill.map(x => (x && !x.g) ? newFlower(x) : x);
+        S.tonics = CFG.tonicStart; S.lost = 0; S.pressed = 0;
+        S.v = 3;
+      }
+      if (typeof S.tonics !== 'number') S.tonics = 0;
     }
   }
 } catch(e){}
@@ -1504,6 +1561,52 @@ const V = { screen:'table', mode:'idle', t:0, box:null, P:null, layers:[], genom
 /* ---------- derived ---------- */
 function hueGap(a, b){ return Math.abs(((a - b) % 360 + 540) % 360 - 180); }
 
+/* How much of itself a flower still brings to the arrangement. */
+function vigour(f){
+  if (!f) return 0;
+  if (f.st === 'ok') return 1;
+  const span = (f.st === 'ill' ? CFG.illHours : CFG.wiltHours) * 3600e3;
+  const u = clamp((Date.now() - f.t0) / span, 0, 1);
+  return f.st === 'ill' ? (1 - u) * 0.55 : lerp(1, CFG.wiltFloor, u);
+}
+const ailing = f => !!f && f.st !== 'ok';
+
+/* Life is spent by opening parcels — never by the clock. */
+function ageSill(r){
+  for (let i = 0; i < 9; i++){
+    const f = S.sill[i];
+    if (!f || f.st !== 'ok') continue;
+    f.life--;
+    if (f.life <= 0){ f.st = 'wilt'; f.t0 = Date.now(); }
+    else if (r() < CFG.illChance){ f.st = 'ill'; f.t0 = Date.now(); }
+  }
+}
+/* Only the last stretch runs on the wall clock, and the two endings differ:
+   a flower that simply finished is preserved; one lost to illness is not. */
+function resolveSill(){
+  const now = Date.now();
+  let pressed = 0, lost = 0;
+  for (let i = 0; i < 9; i++){
+    const f = S.sill[i]; if (!f || f.st === 'ok') continue;
+    const span = (f.st === 'ill' ? CFG.illHours : CFG.wiltHours) * 3600e3;
+    if (now - f.t0 < span) continue;
+    if (f.st === 'wilt'){ recordFlower(f.g); S.pressed++; pressed++; }
+    else { S.lost++; lost++; }
+    S.sill[i] = null;
+  }
+  return { pressed, lost };
+}
+function useTonic(i){
+  const f = S.sill[i];
+  if (!f || !ailing(f) || S.tonics <= 0) return false;
+  S.tonics--;
+  f.st = 'ok'; f.t0 = 0;
+  f.life = Math.max(f.life, Math.round(CFG.flowerLife * 0.8));
+  Snd.chime('uncommon');
+  updateHUD(); save();
+  return true;
+}
+
 /* The sill is scored over its twelve neighbour pairs. Each pair takes its best
    bond tier, bonded neighbours are unioned into a set, and every pot in a set
    is thrown in the same glaze so the arrangement can be read at a glance. */
@@ -1518,11 +1621,12 @@ function harmony(){
     if (!S.sill[i]) continue;
     for (const j of [(i%3 < 2) ? i+1 : -1, (i < 6) ? i+3 : -1]){
       if (j < 0 || !S.sill[j]) continue;
-      const b = bondBetween(S.sill[i], S.sill[j]);
+      const b = bondBetween(S.sill[i].g, S.sill[j].g);
       if (!b) continue;
-      bonds.push({ i, j, tier: b.id, vertical: j === i+3 });
+      const w = Math.min(vigour(S.sill[i]), vigour(S.sill[j]));
+      bonds.push({ i, j, tier: b.id, vertical: j === i+3, w });
       tally[b.id] = (tally[b.id] || 0) + 1;
-      sum += CFG.bond[b.id];
+      sum += CFG.bond[b.id] * w;         // a fading flower keeps less of its bond
       union(i, j);
     }
   }
@@ -1615,6 +1719,9 @@ function updateHUD(){
   $('#pMail').innerHTML = '✉ <b>' + S.mail + '</b>';
   $('#pHarm').textContent = '❀ ×' + hm.mult.toFixed(2);
   $('#pStreak').textContent = '✿ ' + S.streak;
+  const sick = S.sill.filter(ailing).length;
+  $('#pTonic').textContent = '✚ ' + S.tonics + (sick ? '  ·  ' + sick + '!' : '');
+  $('#pTonic').style.color = sick && !S.tonics ? '#9C6B5A' : '';
   $('#pMail').title = 'Parcels waiting';
   $('#pHarm').title = 'How fast parcels arrive';
   $('#pStreak').title = 'Days in a row';
@@ -1648,6 +1755,19 @@ function explainHarmony(){
   note('Parcels arrive ×' + hm.mult.toFixed(2) + ' faster — ' + parts.join(', ') +
        '. That is one every ' + mmss(CFG.parcelIntervalMs/hm.mult) + '.', 4600);
 }
+function explainTonic(){
+  const sick = S.sill.map((f,i) => ailing(f) ? i : -1).filter(i => i >= 0);
+  const wilt = sick.filter(i => S.sill[i].st === 'wilt').length;
+  const ill  = sick.length - wilt;
+  const parts = [];
+  parts.push(S.tonics + (S.tonics === 1 ? ' tonic' : ' tonics') + ' on the shelf.');
+  if (ill)  parts.push(ill + (ill === 1 ? ' flower is ill' : ' flowers are ill') +
+                       ' — untreated it is lost, and does not reach the book.');
+  if (wilt) parts.push(wilt + (wilt === 1 ? ' flower has finished its season' : ' flowers have finished their season') +
+                       ' — left alone they are pressed into the book.');
+  if (!sick.length) parts.push('Nothing on the sill needs one. Tap an ailing flower to spend it.');
+  note(parts.join(' '), 5200);
+}
 function explainStreak(){
   note(S.streak + (S.streak === 1 ? ' day' : ' days') + ' in a row. A day missed only wilts it ' +
        '— it halves, it never resets to nothing.', 4000);
@@ -1655,6 +1775,7 @@ function explainStreak(){
 $('#pMail').onclick   = () => { Snd.resume(); explainMail(); };
 $('#pHarm').onclick   = () => { Snd.resume(); explainHarmony(); };
 $('#pStreak').onclick = () => { Snd.resume(); explainStreak(); };
+$('#pTonic').onclick   = () => { Snd.resume(); explainTonic(); };
 function setScreen(s){
   V.screen = s;
   document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.s === s));
@@ -1686,7 +1807,7 @@ function openParcel(){
 
   const und = undiscovered();
   const due = storyDue();
-  V.genome = null; V.story = null; V.decor = null; V.special = false;
+  V.genome = null; V.story = null; V.decor = null; V.tonic = false; V.special = false;
   if (due){
     // A letter outranks everything, and does not burn the day's special delivery.
     V.story = due;
@@ -1695,6 +1816,8 @@ function openParcel(){
     S.specialPending = false;
     if (V.special && und.length){
       V.genome = makeGenome(r, { sp: pick(r, und).id, ra: r() < 0.55 ? 'rare' : 'uncommon' });
+    } else if (r() < CFG.tonicChance){
+      V.tonic = true;
     } else if (r() < CFG.decorChance){
       V.decor = pick(r, DECOR);
     } else {
@@ -1704,9 +1827,19 @@ function openParcel(){
       V.genome = makeGenome(r, forced ? { ra: forced } : {});
     }
   }
+  ageSill(r);
   V.mode = 'unwrap'; V.bloom = 0; V.shellA = 1; V.shards = []; V.pollen = [];
   setScreen('table');
   updateHUD(); save();
+}
+
+function recordFlower(g){
+  const b = S.book[g.sp] || (S.book[g.sp] = { g, v:{}, mu:{}, n:0 });
+  const newSpecies = b.n === 0, newVariant = !b.v[g.va];
+  b.v[g.va] = (b.v[g.va] || 0) + 1;
+  if (g.mu) b.mu[g.mu] = (b.mu[g.mu] || 0) + 1;
+  b.n++;
+  return { newSpecies, newVariant };
 }
 
 function activeLayer(){ return V.layers.find(L => L.p < DONE) || null; }
@@ -1726,18 +1859,19 @@ function completeParcel(){
   if (V.story){
     if (!S.story.includes(V.story.id)) S.story.push(V.story.id);
     Snd.chime('rare');
+  } else if (V.tonic){
+    S.tonics++;
+    Snd.chime('rare');
   } else if (V.decor){
     V.decorNew = !S.decorFound[V.decor.id];
     S.decorFound[V.decor.id] = (S.decorFound[V.decor.id] || 0) + 1;
     Snd.chime('uncommon');
   } else {
     const g = V.genome, rar = g.ra;
-    const b = S.book[g.sp] || (S.book[g.sp] = { g, v:{}, mu:{}, n:0 });
-    V.isNewSpecies = b.n === 0;
-    V.isNewVariant = !b.v[g.va];
-    b.v[g.va] = (b.v[g.va] || 0) + 1;
-    if (g.mu) b.mu[g.mu] = (b.mu[g.mu] || 0) + 1;
-    b.n++; S.opened++;
+    const rec = recordFlower(g);
+    V.isNewSpecies = rec.newSpecies;
+    V.isNewVariant = rec.newVariant;
+    S.opened++;
     S.pity = (rar === 'rare' || rar === 'legendary') ? 0 : S.pity + 1;
     Snd.chime(rar);
     const ph = phenotype(g);
@@ -1760,6 +1894,16 @@ function showSheet(){
     $('#shPoem').textContent = V.story.line;
     $('#bSill').style.display = 'none';
     $('#bBook').textContent = 'Keep it';
+    $('#bBook').classList.add('hi');
+  } else if (V.tonic){
+    $('#shRar').textContent = 'TONIC';
+    $('#shRar').style.color = '#9A7B3E';
+    $('#shName').textContent = 'A small amber bottle';
+    $('#shMu').textContent = '';
+    $('#shPoem').textContent = 'Enough for one flower. It will not come often — ' +
+                               'spend it on something you would miss.';
+    $('#bSill').style.display = 'none';
+    $('#bBook').textContent = 'Put it on the shelf';
     $('#bBook').classList.add('hi');
   } else if (V.decor){
     $('#shRar').textContent = 'ORNAMENT';
@@ -1790,7 +1934,7 @@ function hideSheet(){ elSheet.classList.remove('up'); document.body.classList.re
 
 $('#bBook').onclick = () => {
   hideSheet(); V.mode='idle';
-  V.genome = null; V.decor = null; V.story = null;
+  V.genome = null; V.decor = null; V.story = null; V.tonic = false;
   updateHUD(); save();
 };
 $('#bSill').onclick = () => {
@@ -1815,7 +1959,7 @@ if (S.seen){ const i = $('#intro'); if (i) i.remove(); }
 function placeAt(i){
   if (V.placing !== 'flower' || !V.genome) return;
   const old = S.sill[i];
-  S.sill[i] = V.genome;
+  S.sill[i] = newFlower(V.genome, Math.random);
   V.placing = false; V.genome = null;
   Snd.press();
   const hm = harmony(), mine = bondsAt(i, hm);
@@ -1908,9 +2052,29 @@ function endPointer(e){
   if (!gb) return;
   if (!gb.moved){                                   // a tap: tell me about this one
     if (gb.kind === 'flower'){
+      const f = S.sill[gb.idx];
+      if (ailing(f)){
+        // a tonic is scarce enough that spending one should take two taps
+        if (V.armed && V.armed.idx === gb.idx && Date.now() < V.armed.until){
+          V.armed = null;
+          if (useTonic(gb.idx)) note(flowerName(f.g) + ' recovers.', 2600);
+        } else if (S.tonics > 0){
+          V.armed = { idx: gb.idx, until: Date.now() + 4000 };
+          note('<b>' + flowerName(f.g) + '</b> — ' +
+               (f.st === 'ill' ? 'ill, and will be lost if untreated'
+                               : 'has finished its season') +
+               '.<br>Tap again to use a tonic (' + S.tonics + ' left).', 4000);
+        } else {
+          note('<b>' + flowerName(f.g) + '</b> — ' +
+               (f.st === 'ill' ? 'ill. Without a tonic it will be lost, and will not reach the book.'
+                               : 'has finished its season. Left alone it is pressed into the book.'),
+               4400);
+        }
+        return;
+      }
       const hm = harmony(), mine = bondsAt(gb.idx, hm);
-      note(flowerName(S.sill[gb.idx]) + ' — ' +
-           (mine.length ? mine.map(b => BD[b.tier].name + ' (' + BD[b.tier].hint + ')').join(', ')
+      note(flowerName(f.g) + ' — ' + f.life + ' more ' + (f.life === 1 ? 'parcel' : 'parcels') + '. ' +
+           (mine.length ? mine.map(b => BD[b.tier].name).join(', ')
                         : 'no bond with its neighbours yet'), 3200);
     } else {
       note(DE[S.decor[gb.idx]].name, 2000);
@@ -2168,6 +2332,8 @@ function drawTable(){
   const e = 1 - Math.pow(1 - V.bloom, 3);
   if (V.story){
     drawCurio(ctx, V.story.id, box.cx, box.cy - H*0.02, 54*e);
+  } else if (V.tonic){
+    drawTonic(ctx, box.cx, box.cy - H*0.02, 62*e);
   } else if (V.decor){
     drawDecor(ctx, V.decor.id, box.cx, box.cy - H*0.02, 52*e);
   } else {
@@ -2240,9 +2406,36 @@ function drawShelf(){
     const s = g.slot(i), fl = S.sill[i];
     const lifted = grab && grab.kind === 'flower' && grab.idx === i;
     if (fl && !lifted){
-      drawFlower(ctx, phenotype(fl), s.x, s.y - g.dy*0.52, Math.min(g.dx*0.34, 35), 1, V.t + i,
-                 { stemLen: g.dy*0.44, sway: 0.6 });
+      const vig = vigour(fl);
+      // closing, drooping and draining of colour together — one of them alone
+      // is too quiet to notice on a shelf of nine
+      ctx.save();
+      ctx.globalAlpha = 0.5 + 0.5*vig;
+      drawFlower(ctx, phenotype(fl.g), s.x, s.y - g.dy*0.52, Math.min(g.dx*0.34, 35),
+                 0.34 + 0.66*vig, V.t + i,
+                 { stemLen: g.dy*0.44, sway: 0.6, droop: 1.6*(1 - vig) });
+      ctx.restore();
       drawPot(ctx, s.x, s.y, hm.glazeOf[i], 1.35, i*23);
+      if (ailing(fl)){
+        const ill = fl.st === 'ill';
+        const pulse = 0.55 + 0.45*Math.sin(V.t*(ill ? 3.4 : 1.8) + i);
+        ctx.save();
+        ctx.globalAlpha = ill ? 0.5 + 0.5*pulse : 0.75;
+        ctx.fillStyle = ill ? '#9C6B5A' : MOR.ink3;
+        if (ill){
+          ctx.beginPath(); ctx.arc(s.x + 18, s.y - 18, 6.4, 0, TAU); ctx.fill();
+          ctx.fillStyle = '#F4EEE2';
+          ctx.beginPath(); ctx.arc(s.x + 18, s.y - 15.6, 1.5, 0, TAU); ctx.fill();
+          ctx.fillRect(s.x + 17.1, s.y - 21.4, 1.9, 4.4);
+        } else {                                  // a petal already on the sill
+          ctx.beginPath();
+          ctx.ellipse(s.x + 18, s.y - 16, 5.4, 2.6, 0.5, 0, TAU); ctx.fill();
+          ctx.globalAlpha *= 0.6;
+          ctx.beginPath();
+          ctx.ellipse(s.x + 11, s.y - 13, 4.2, 2.1, -0.3, 0, TAU); ctx.fill();
+        }
+        ctx.restore();
+      }
     } else {
       const live = V.placing === 'flower' || lifted || hoverSlot === i;
       ctx.strokeStyle = live ? `rgba(152,124,62,${0.6 + Math.sin(V.t*4 + i)*0.28})`
@@ -2288,8 +2481,8 @@ function drawShelf(){
     ctx.shadowColor = 'rgba(90,78,62,.3)'; ctx.shadowBlur = 14; ctx.shadowOffsetY = 6;
     if (grab.kind === 'flower'){
       const fl = S.sill[grab.idx];
-      drawFlower(ctx, phenotype(fl), grab.x, grab.y - 22, Math.min(g.dx*0.36, 37), 1, V.t,
-                 { stemLen: g.dy*0.4, sway: 0.3 });
+      drawFlower(ctx, phenotype(fl.g), grab.x, grab.y - 22, Math.min(g.dx*0.36, 37),
+                 0.42 + 0.58*vigour(fl), V.t, { stemLen: g.dy*0.4, sway: 0.3 });
       drawPot(ctx, grab.x, grab.y + 18, hm.glazeOf[grab.idx], 1.4);
     } else {
       drawDecor(ctx, S.decor[grab.idx], grab.x, grab.y, 23);
@@ -2303,6 +2496,13 @@ function drawShelf(){
   } else if (V.placing === 'decor' && V.decor){
     drawDecor(ctx, V.decor.id, W/2, H*0.86, 24);
     hint('Tap a spot on the ledge');
+  } else if (S.sill.some(ailing)){
+    const ill = S.sill.filter(f => f && f.st === 'ill').length;
+    const w   = S.sill.filter(f => f && f.st === 'wilt').length;
+    const bits = [];
+    if (ill) bits.push(ill + (ill === 1 ? ' flower is ill' : ' flowers are ill'));
+    if (w)   bits.push(w + (w === 1 ? ' has finished' : ' have finished'));
+    hint(bits.join(' &nbsp;·&nbsp; ') + ' &nbsp;·&nbsp; <i>tap it</i> &nbsp;·&nbsp; ×' + hm.mult.toFixed(2));
   } else if (hm.bonds.length || hm.decorOn){
     const bits = [];
     if (hm.bonds.length) bits.push(hm.bonds.length + (hm.bonds.length === 1 ? ' bond' : ' bonds'));
@@ -2524,6 +2724,14 @@ function frame(ts){
     accT = 0;
     const before = S.mail;
     dayCheck(); accrue();
+    const done = resolveSill();
+    if (done.pressed || done.lost){
+      const bits = [];
+      if (done.pressed) bits.push(done.pressed + (done.pressed === 1 ? ' flower finished its season and is pressed into the book' : ' flowers finished their season and are pressed into the book'));
+      if (done.lost)    bits.push(done.lost + (done.lost === 1 ? ' was lost to illness' : ' were lost to illness'));
+      note(bits.join('. ') + '.', 5200);
+      save();
+    }
     updateHUD();
     if (S.mail !== before) save();
   }
@@ -2541,6 +2749,7 @@ window.PP = { S, V, CFG, GES, SPECIES, VARIANTS, RARITY, CURIOS,
               save, openParcel, phenotype, harmony, bookStats,
               drawFlower, makeGenome, mulberry32, ctx, get W(){return W}, get H(){return H},
               BONDS, BD, bondBetween, DECOR, STORY, storyDue, bondsAt, showSheet, flowerName, bookLayout,
+              newFlower, vigour, ailing, ageSill, resolveSill, useTonic, recordFlower,
               shelfGeom, ledgeGeom, slotAt, ledgeAt,
               BOIL, boilTick, paint,
               reset(){ localStorage.removeItem(KEY); location.reload(); } };

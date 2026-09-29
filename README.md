@@ -34,6 +34,31 @@ That's it. Works on a phone or a desktop browser. Saves to `localStorage`.
 
 A session is about ninety seconds. That's deliberate.
 
+## The life of a flower
+
+A flower placed on the sill has **25 parcels** of life, give or take a fifth so
+a shelf never expires in unison. Life is spent by *opening parcels*, never by
+the clock — so time away cannot consume it.
+
+Only the ending runs on the wall clock, and there are two of them:
+
+- **Spent.** Life reaches zero, the flower begins to fade, and after
+  `wiltHours` it is **pressed into the Herbarium** — preserved. Nothing leaves
+  the collection this way.
+- **Ill.** A small chance per parcel strikes a healthy flower. It fades much
+  faster, and after `illHours` it is **lost** — and does *not* reach the book.
+  A **tonic** cures it. Tonics are deliberately scarcer than illness, so you
+  cannot save everything and have to choose.
+
+That split is the whole point: attention preserves, neglect actually costs, and
+a fortnight away can only take the few that were already on their way out — it
+can never take the shelf.
+
+A fading flower keeps less of its bond (a bond is only as strong as its weaker
+flower), droops, closes, and drains toward the colour of the wall. Replacing it
+leaves a hole in the arrangement, so a spent flower is not just a slot to refill
+— it is a puzzle to re-solve.
+
 ## Bonds
 
 Two neighbouring flowers can agree in four ways. Each pair takes its best tier,
@@ -232,6 +257,32 @@ computes every position first, so the scroll range ends exactly where the
 content does. An earlier version guessed at the height and supported only
 dragging, which left the foot of the page unreachable on a desktop — the
 gesture a mouse user actually reaches for did nothing at all.
+
+## Tuning the economy
+
+`tests/economy.js` models the loop over sixty simulated days so the numbers are
+chosen rather than guessed. It is a model, not the game — arrangement quality is
+a parameter calibrated against real measurements — but accrual, the cap, parcel
+contents, life in parcels, the wilt and illness windows and tonic supply all
+follow the game's own rules.
+
+```
+node tests/economy.js           # the current settings
+node tests/economy.js --sweep   # a grid over interval x cap
+```
+
+Two findings it produced, both of which changed the design:
+
+- **The post was serving 51 parcels a day.** At one every 90s with a cap of 8,
+  a player checking in three times a day never waited for anything. It now runs
+  at one per 5 minutes, cap 5 — about 22 a day, and a session ends naturally
+  when the mailbox runs dry, which is what makes the next one worth waiting for.
+- **Slowing the post cannot make flowers scarce.** Because life is counted in
+  parcels, halving the delivery rate halves the ageing rate too; the sweep shows
+  occupancy pinned at 9/9 at every setting from 15 to 52 parcels a day. Rate and
+  scarcity are independent levers. If the sill should ever feel *hungry*, that
+  has to come from a shorter `flowerLife` or a shorter `wiltHours`, not from the
+  post.
 
 ## Tuning
 

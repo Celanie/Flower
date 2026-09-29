@@ -9,7 +9,7 @@ const T=(n,c,x='')=>(c?ok:bad).push(n+(x?' :: '+x:''));
   await page.click('#bStart'); await page.waitForTimeout(400);
   await page.evaluate(() => {
     const r = PP.mulberry32(20260927);
-    PP.S.sill = Array.from({length:9}, (_,i) => PP.makeGenome(r, { sp: PP.SPECIES[(i*3+1)%14].id }));
+    PP.S.sill = Array.from({length:9}, (_,i) => PP.newFlower(PP.makeGenome(r, { sp: PP.SPECIES[(i*3+1)%14].id })));
     PP.S.decorFound = {bell:1, moth:1, stone:1}; PP.S.decor = ['bell', 'moth', 'stone'];
     PP.V.mode = 'idle';
   });
@@ -80,7 +80,7 @@ const T=(n,c,x='')=>(c?ok:bad).push(n+(x?' :: '+x:''));
   await page.evaluate(() => {
     if (document.getElementById('bStart')) document.getElementById('bStart').click();
     const r = PP.mulberry32(20260927);
-    PP.S.sill = Array.from({length:9}, (_,i) => PP.makeGenome(r, { sp: PP.SPECIES[(i*3+1)%14].id }));
+    PP.S.sill = Array.from({length:9}, (_,i) => PP.newFlower(PP.makeGenome(r, { sp: PP.SPECIES[(i*3+1)%14].id })));
     PP.SPECIES.forEach(sp => { const g = PP.makeGenome(r,{sp:sp.id});
       PP.S.book[sp.id] = {g, v:{[g.va]:1}, mu:{}, n:1}; });
   });
