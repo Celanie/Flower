@@ -86,9 +86,14 @@ const T=(n,c,x='')=>(c?ok:bad).push(n+(x?' :: '+x:''));
   });
   await page.waitForTimeout(300);
   const fTable = await fps('table'), fSill = await fps('shelf'), fBook = await fps('book');
+  // the catalogue re-lays itself out every frame, the same as the herbarium does,
+  // so it gets the same floor
+  await page.evaluate(() => { PP.S.petals = 800; });
+  const fShop = await fps('shop');
   T('table holds a usable frame rate', fTable >= 40, fTable.toFixed(0) + ' fps (floor 40)');
   T('sill holds a usable frame rate',  fSill  >= 25, fSill.toFixed(0)  + ' fps (floor 25)');
   T('herbarium holds a usable frame rate', fBook >= 25, fBook.toFixed(0) + ' fps (floor 25)');
+  T('catalogue holds a usable frame rate', fShop >= 25, fShop.toFixed(0) + ' fps (floor 25)');
 
   console.log('PASS ' + ok.length + '\n  ' + ok.join('\n  '));
   if (bad.length) console.log('\nFAIL ' + bad.length + '\n  ' + bad.join('\n  '));

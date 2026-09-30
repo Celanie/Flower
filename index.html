@@ -29,7 +29,7 @@ html,body{margin:0;height:100%;overflow:hidden;background:#CFC3AE;color:var(--in
   width:100%;max-width:480px;pointer-events:none}
 .col>*{pointer-events:auto}
 
-#hud{position:absolute;left:0;right:0;top:0;display:flex;align-items:center;gap:6px;
+#hud{position:absolute;left:0;right:0;top:0;display:flex;align-items:center;gap:6px;flex-wrap:wrap;
   padding:calc(env(safe-area-inset-top,0px) + 11px) 12px 0;font-size:calc(12.5px*var(--ui,1))}
 .pill{background:rgba(252,248,240,.7);border:1px solid var(--line);
   border-radius:999px;padding:6px 11px;letter-spacing:.02em;white-space:nowrap;color:var(--ink2);cursor:pointer;
@@ -42,7 +42,7 @@ html,body{margin:0;height:100%;overflow:hidden;background:#CFC3AE;color:var(--in
   box-shadow:0 4px 18px rgba(90,78,62,.12);
   backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);transition:opacity .28s}
 #tabs button{font:inherit;font-size:calc(13.5px*var(--ui,1));color:var(--ink3);background:none;border:0;
-  padding:10px 22px;border-radius:999px;cursor:pointer;transition:.18s}
+  padding:10px 16px;border-radius:999px;cursor:pointer;transition:.18s}
 #tabs button.on{background:var(--ink);color:#F3EDE1;font-weight:600}
 
 #hint{position:absolute;left:0;right:0;bottom:calc(env(safe-area-inset-bottom,0px) + 76px);
@@ -96,11 +96,13 @@ body.sheeting #tabs{opacity:0;pointer-events:none}
       <div class="pill" id="pHarm">❀ ×1.0</div>
       <div class="pill" id="pStreak">✿ 1</div>
       <div class="pill" id="pTonic">✚ 1</div>
+      <div class="pill" id="pPetal">❦ <b>0</b></div>
     </div>
     <nav id="tabs">
       <button data-s="table" class="on">Table</button>
       <button data-s="shelf">Sill</button>
       <button data-s="book">Book</button>
+      <button data-s="shop">Order</button>
     </nav>
     <div id="hint"></div>
     <div id="toast"></div>
@@ -141,19 +143,51 @@ const CFG = {
   lifeSpread       : 0.22,       // +/- variance, so a sill does not expire in unison
   wiltHours        : 20,         // spent -> pressed into the book, preserved
   illHours         : 8,          // ill  -> dies, and is NOT preserved
-  illChance        : 0.005,      // per healthy flower, per parcel opened
   wiltFloor        : 0.35,       // what a fading flower still contributes
+
+  /* Illness is DERIVED, never dialled. There is deliberately no single
+     `illChance` constant, because the moment relief from illness is sold,
+     that one number becomes a revenue lever — and that is the exact
+     mechanism by which a gentle game turns predatory. So risk is a
+     function of the sill's own visible state: old flowers fade, and rot
+     spreads to what is standing next to it. Both are things the player
+     can see and act on. Nobody can quietly turn this up without also
+     changing what is on screen. */
+  ill              : { base   : 0.0022,  // a floor, for any healthy flower
+                       age    : 0.0130,  // rises over the last `ageFrom` of its life
+                       ageFrom: 0.34,    // ...beginning when a third of life is left
+                       spread : 0.0170 },// per ailing NEIGHBOUR, left on the sill
+
   tonicChance      : 0.018,      // parcels holding a tonic
   tonicStart       : 1,
   pityAt           : 7,          // a Rare+ is guaranteed within this many opens
   curioChance      : 0.055,      // chance the parcel holds something that is not a flower
-  bond             : {kin:0.12, counter:0.10, tone:0.09, echo:0.06}, // per bonded pair
-  shelfAccord      : 0.10,       // a whole shelf of three, all bonded
+  // Bonds were retuned when the ledge grew: a perfect all-kin sill used to
+  // reach the cap, which made careful arrangement worth no more than adequate
+  // arrangement. Now the ceiling is reachable only by a sill of one family
+  // with a full ledge, and a good mixed sill lands around x1.95.
+  bond             : {kin:0.09, counter:0.10, tone:0.09, echo:0.06}, // per bonded pair
+  shelfAccord      : 0.08,       // a whole shelf of three, all bonded
   fullSill         : 0.10,       // every pot filled
   decorBonus       : 0.03,       // per ornament on the ledge
   decorChance      : 0.05,       // chance a parcel holds an ornament
   storyAt          : [2, 7, 14, 23, 34, 47], // opens at which the sender writes again
-  harmonyCap       : 2.00,
+  harmonyCap       : 2.50,
+
+  // --- the catalogue ---
+  shop             : { ledge: 420, seed: 90 },
+  ledgePays        : 3,          // ornaments that count toward speed, however long
+                                 // the ledge is. The extra places are for show,
+                                 // which is what keeps the shop out of the balance.
+
+  // --- pressed petals: what the collection pays once it starts repeating ---
+  /* The book used to be the end of the line: a flower you already had just
+     incremented a counter. Petals give the late game somewhere to go, and
+     they come from exactly the thing that was previously worthless. */
+  petal            : { dup   : {common:1, uncommon:2, rare:4, legendary:8},
+                       press : 3,        // a flower that finished its season
+                       first : 0 },      // a flower new to the book pays nothing:
+                                         // discovery is its own reward
   squeezeSeconds   : 1.15,       // hold-to-squeeze fill time (the "pressure" substitute)
   boil             : {fps: 8, frames: 3, amp: 0.95},  // hand-drawn line boil
   outlines         : false,      // painted shapes, not ink-and-wash
@@ -448,14 +482,83 @@ const STORY_END = 'The parcels keep coming. You have stopped wondering who, and 
 
 /* Each matched group gets one glaze. The mark is not decoration: colour alone
    would fail for a colour-blind player, so each glaze also has a distinct
-   relief, and the two always travel together. */
-const GLAZES = [
-  {body:'#C4977C', rim:'#9E735A', mark:'band',   name:'terracotta'},
-  {body:'#9BAE94', rim:'#748769', mark:'dots',   name:'sage'},
-  {body:'#98A8BA', rim:'#71829A', mark:'stripe', name:'slate'},
-  {body:'#D2B478', rim:'#A88B52', mark:'cross',  name:'ochre'},
+   relief, and the two always travel together.
+
+   A glaze SET is the cosmetic unit, and this is the one honest place to sell
+   something. The set never decides WHICH pot gets which glaze — the bond
+   grouping owns that, because it has to for the sill to be readable. A set
+   only decides what those four glazes look like. So a purchase cannot touch
+   legibility: the marks stay in the same order in every set, which means the
+   grouping is readable by relief alone whatever you have bought. */
+const GLAZE_SETS = [
+  { id:'kiln', name:'Kiln Yard', price:0,
+    note:'The pots the flowers arrived in. Earthenware, thumbprints and all.',
+    pots:[{body:'#C4977C', rim:'#9E735A', mark:'band',   name:'terracotta'},
+          {body:'#9BAE94', rim:'#748769', mark:'dots',   name:'sage'},
+          {body:'#98A8BA', rim:'#71829A', mark:'stripe', name:'slate'},
+          {body:'#D2B478', rim:'#A88B52', mark:'cross',  name:'ochre'}],
+    plain:{body:'#D5C5A8', rim:'#B5A384', mark:'none', name:'plain'} },
+
+  { id:'harbour', name:'Harbour Salt', price:260,
+    note:'Glazes that came off a boat. Cooler, and a little bleached by it.',
+    pots:[{body:'#B9A290', rim:'#937E6D', mark:'band',   name:'driftwood'},
+          {body:'#93A9A6', rim:'#6D8280', mark:'dots',   name:'verdigris'},
+          {body:'#8F9CB1', rim:'#68768D', mark:'stripe', name:'indigo'},
+          {body:'#C08E74', rim:'#976851', mark:'cross',  name:'rust'}],
+    plain:{body:'#D3CCC0', rim:'#B2AA9C', mark:'none', name:'salt'} },
+
+  { id:'orchard', name:'Orchard Windfall', price:300,
+    note:'Fruit-skin colours. Warmer than the room, on purpose.',
+    pots:[{body:'#B08A93', rim:'#8A666F', mark:'band',   name:'plum'},
+          {body:'#9CA87E', rim:'#76815A', mark:'dots',   name:'pear'},
+          {body:'#CFA968', rim:'#A47F43', mark:'stripe', name:'honey'},
+          {body:'#AE8F7D', rim:'#866A59', mark:'cross',  name:'medlar'}],
+    plain:{body:'#DBCDB4', rim:'#B9AB90', mark:'none', name:'bisque'} },
+
+  /* The first glaze in a set is the one you see most of: a sill that is fully
+     bonded is a single group, and a single group takes one glaze. So every set
+     leads with a mid value rather than its darkest — nine charcoal pots would
+     sit on the room like a weight. The marks stay in band/dots/stripe/cross
+     order in every set, which is what keeps a group readable by relief alone. */
+  { id:'ash', name:'Ash & Chalk', price:300,
+    note:'No colour at all, only light and shade. The clearest set to read.',
+    pots:[{body:'#A5A29A', rim:'#807D75', mark:'band',   name:'ash'},
+          {body:'#7E7A74', rim:'#5C5953', mark:'dots',   name:'charcoal'},
+          {body:'#E4DFD3', rim:'#B8B3A7', mark:'stripe', name:'chalk'},
+          {body:'#C8C4BA', rim:'#A09C92', mark:'cross',  name:'dove'}],
+    plain:{body:'#D2CEC4', rim:'#AFABA1', mark:'none', name:'unglazed'} },
 ];
-const POT_PLAIN = {body:'#D5C5A8', rim:'#B5A384', mark:'none', name:'plain'};
+const GS = {}; GLAZE_SETS.forEach(g => GS[g.id] = g);
+function glazeSet(){ return GS[S.glaze] || GLAZE_SETS[0]; }
+function POTS(){ return glazeSet().pots; }
+
+/* The room, sold the same way: colour and a wall motif, nothing structural.
+   Everything here still goes through the GROUND envelope, so a bought paper
+   cannot start competing with the flowers. */
+const PAPERS = [
+  { id:'stripe', name:'Bone Stripe', price:0, motif:'stripe',
+    note:'Whatever was on the wall when you moved in.',
+    // the room the game shipped with: taken from the palette, not copied out of it
+    wall: MOR.wall, wallLo: MOR.wallLo, frame: MOR.frame, sill: MOR.sill,
+    wood: MOR.wood, woodDk: MOR.woodDk },
+
+  { id:'sprig', name:'Pressed Sprig', price:180, motif:'sprig',
+    note:'A scattered sprig, printed slightly out of register.',
+    wall:'#E7E7DC', wallLo:'#D2D4C6', frame:'#B7B097', sill:'#C8C2A6',
+    wood:'#C9C0A4', woodDk:'#9F9779' },
+
+  { id:'gingham', name:'Faded Gingham', price:180, motif:'check',
+    note:'A kitchen check, washed until it is nearly not there.',
+    wall:'#EDE6DC', wallLo:'#DCD2C4', frame:'#C0A98C', sill:'#CFBEA0',
+    wood:'#D4C1A2', woodDk:'#A9926F' },
+
+  { id:'limewash', name:'Lime Wash', price:220, motif:'none',
+    note:'Bare plaster. The flowers have nothing to argue with.',
+    wall:'#EFEBE1', wallLo:'#DEDACE', frame:'#C5BCA6', sill:'#D3CAB2',
+    wood:'#CFC6AE', woodDk:'#A49B83' },
+];
+const PA = {}; PAPERS.forEach(x => PA[x.id] = x);
+function paper(){ return PA[S.paper] || PAPERS[0]; }
 
 function potPath(ctx, x, y, k){
   ctx.beginPath();
@@ -464,7 +567,8 @@ function potPath(ctx, x, y, k){
   ctx.closePath();
 }
 function drawPot(ctx, x, y, glazeIdx, k = 1, bseed = 0){
-  const g = glazeIdx >= 0 ? GLAZES[glazeIdx] : POT_PLAIN;
+  const st = glazeSet();
+  const g = glazeIdx >= 0 ? st.pots[glazeIdx % st.pots.length] : st.plain;
   ctx.save();
   boilShift(ctx, bseed + 500, 0.55);
   ctx.fillStyle = 'rgba(112,96,76,.13)';
@@ -1407,6 +1511,9 @@ const GES = {
       const boost = (input.type === 'pen' && input.pressure > 0.05) ? 0.55 + input.pressure*1.1 : 1;
       if (Ly.held) Ly.f = clamp(Ly.f + dt/CFG.squeezeSeconds*boost, 0, 1);
       else         Ly.f = clamp(Ly.f - dt*0.8, 0, 1);
+      // snap like the other four: a hold that lands at .9996 counts as finished
+      // everywhere else, and without this the bar would linger over the bloom
+      Ly.f = snap(Ly.f);
       Ly.p = Ly.f;
       Ly.tick_ += dt;
       if (Ly.held && Ly.tick_ > 0.1){ Ly.tick_ = 0; Snd.strain(Ly.f); }
@@ -1515,20 +1622,27 @@ function newFlower(g, r){
   const v = r ? (1 - CFG.lifeSpread + 2*CFG.lifeSpread*r()) : 1;
   return { g, life: Math.round(CFG.flowerLife * v), st: 'ok', t0: 0 };
 }
+const LEDGE_SHORT = 3, LEDGE_LONG = 5;
+function ledgeSlots(){ return S.ledge ? LEDGE_LONG : LEDGE_SHORT; }
 function fresh(){
-  return { v:3, mail:CFG.startParcels, lastAccrual:Date.now(), pity:0, opened:0,
+  return { v:4, mail:CFG.startParcels, lastAccrual:Date.now(), pity:0, opened:0,
            tonics:CFG.tonicStart, lost:0, pressed:0,
            sill:new Array(9).fill(null), book:{},
-           decor:new Array(3).fill(null),   // the ledge
+           decor:new Array(LEDGE_SHORT).fill(null),   // the ledge
            decorFound:{}, story:[],          // ornaments seen; story ids, in arrival order
-           streak:1, lastDay:today(), special:'', specialPending:false, seen:false };
+           streak:1, lastDay:today(), special:'', specialPending:false, seen:false,
+           // --- what the catalogue touches ---
+           petals:0, spent:0,               // earned from duplicates; lifetime spend
+           glaze:'kiln', paper:'stripe',     // the two cosmetic slots
+           owned:{}, ledge:false,            // what has been bought; the long ledge
+           seed:null };                      // a sown packet, waiting for the next parcel
 }
 let S = fresh();
 try {
   const raw = localStorage.getItem(KEY);
   if (raw){
     const o = JSON.parse(raw);
-    if (o && o.v >= 1 && o.v <= 3){
+    if (o && o.v >= 1 && o.v <= 4){
       S = Object.assign(fresh(), o);
       if (o.v === 1){                       // v1 kept one undifferentiated "oddments" bag
         S.story = STORY.filter(x => o.odd && o.odd[x.id]).map(x => x.id);
@@ -1537,7 +1651,7 @@ try {
         delete S.odd;
         S.v = 2;
       }
-      if (!Array.isArray(S.decor) || S.decor.length !== 3) S.decor = new Array(3).fill(null);
+      if (!Array.isArray(S.decor)) S.decor = new Array(LEDGE_SHORT).fill(null);
       if (!Array.isArray(S.story)) S.story = [];
       if (!S.decorFound) S.decorFound = {};
       if (!(o.v >= 3)){                  // slots used to hold a bare genome
@@ -1545,7 +1659,18 @@ try {
         S.tonics = CFG.tonicStart; S.lost = 0; S.pressed = 0;
         S.v = 3;
       }
+      if (!(o.v >= 4)){                  // before the catalogue existed
+        S.petals = 0; S.spent = 0; S.owned = {}; S.ledge = false; S.seed = null;
+        S.glaze = 'kiln'; S.paper = 'stripe';
+        S.v = 4;
+      }
       if (typeof S.tonics !== 'number') S.tonics = 0;
+      if (typeof S.petals !== 'number') S.petals = 0;
+      if (!S.owned || typeof S.owned !== 'object') S.owned = {};
+      if (S.seed && !SP[S.seed]) S.seed = null;
+      // the ledge grew: keep the array and the unlock in step, in both directions
+      while (S.decor.length < ledgeSlots()) S.decor.push(null);
+      if (S.decor.length > ledgeSlots()) S.decor.length = ledgeSlots();
     }
   }
 } catch(e){}
@@ -1556,6 +1681,7 @@ function save(){ try { localStorage.setItem(KEY, JSON.stringify(S)); } catch(e){
 const V = { screen:'table', mode:'idle', t:0, box:null, P:null, layers:[], genome:null, curio:null,
             special:false, bloom:0, shellA:1, shards:[], pollen:[], placing:false,
             bookScroll:0, bookDrag:null, grab:null, decor:null, story:null,
+            shopScroll:0, shopDrag:null, shopMoved:false, armedBuy:null,
             note:'', noteT:0, shake:0 };
 
 /* ---------- derived ---------- */
@@ -1571,14 +1697,53 @@ function vigour(f){
 }
 const ailing = f => !!f && f.st !== 'ok';
 
+/* the four pots touching this one */
+function neighbours(i){
+  const c = i % 3, r = (i - c)/3, out = [];
+  if (c > 0) out.push(i - 1);
+  if (c < 2) out.push(i + 1);
+  if (r > 0) out.push(i - 3);
+  if (r < 2) out.push(i + 3);
+  return out;
+}
+/* Illness is read off the sill rather than rolled against a constant. Two
+   causes, both of them visible in the room:
+
+     age    — a flower in its last third is frail
+     spread — rot travels from an ILL neighbour to what stands beside it
+
+   Only illness spreads. A flower that has simply finished its season is
+   harmless, because the game asks you to leave that one alone so it reaches
+   the book — it would be incoherent to punish you for doing what it asked.
+   So the two endings stay genuinely different: one is a slow goodbye, the
+   other is a thing you have hours to deal with before it takes a neighbour
+   with it.
+
+   The way to stay healthy is therefore to clear ILL pots, which is a decision
+   on the screen rather than a number in a config. It is also why nobody can
+   quietly raise the illness rate to sell more tonics: there is no rate. */
+function illRisk(i){
+  const f = S.sill[i];
+  if (!f || f.st !== 'ok') return 0;
+  const C = CFG.ill;
+  const last = Math.max(1, CFG.flowerLife * C.ageFrom);
+  const age  = clamp(1 - f.life / last, 0, 1);       // 0 until it enters the last stretch
+  let sick = 0;
+  for (const j of neighbours(i)){ const n = S.sill[j]; if (n && n.st === 'ill') sick++; }
+  return C.base + C.age*age + C.spread*sick;
+}
 /* Life is spent by opening parcels — never by the clock. */
 function ageSill(r){
+  // every risk is measured before anything changes, so the outcome does not
+  // depend on which pot happens to be checked first
+  const risk = [];
+  for (let i = 0; i < 9; i++) risk[i] = illRisk(i);
   for (let i = 0; i < 9; i++){
     const f = S.sill[i];
     if (!f || f.st !== 'ok') continue;
     f.life--;
     if (f.life <= 0){ f.st = 'wilt'; f.t0 = Date.now(); }
-    else if (r() < CFG.illChance){ f.st = 'ill'; f.t0 = Date.now(); }
+    else if (r() < risk[i]){ f.st = 'ill'; f.t0 = Date.now(); }
   }
 }
 /* Only the last stretch runs on the wall clock, and the two endings differ:
@@ -1590,8 +1755,11 @@ function resolveSill(){
     const f = S.sill[i]; if (!f || f.st === 'ok') continue;
     const span = (f.st === 'ill' ? CFG.illHours : CFG.wiltHours) * 3600e3;
     if (now - f.t0 < span) continue;
-    if (f.st === 'wilt'){ recordFlower(f.g); S.pressed++; pressed++; }
-    else { S.lost++; lost++; }
+    if (f.st === 'wilt'){
+      recordFlower(f.g); S.pressed++; pressed++;
+      S.petals += CFG.petal.press;        // a season's worth of petals to sweep up
+    }
+    else { S.lost++; lost++; }            // illness pays nothing. A loss stays a loss.
     S.sill[i] = null;
   }
   return { pressed, lost };
@@ -1639,7 +1807,12 @@ function harmony(){
         bonds.some(x => x.i===a && x.j===a+1) && bonds.some(x => x.i===a+1 && x.j===a+2)) shelves++;
   }
   const full = S.sill.every(Boolean);
-  const decorOn = (S.decor || []).filter(Boolean).length;
+  /* The ledge pays for its first three ornaments and no more, however long it
+     is. This is the line that keeps the catalogue honest: the only things for
+     sale are paint, places to stand things, and seeds, and not one of them can
+     make a parcel arrive sooner. */
+  const decorFilled = (S.decor || []).filter(Boolean).length;
+  const decorOn = Math.min(CFG.ledgePays, decorFilled);
 
   const size = {};
   for (let i=0;i<9;i++) if (S.sill[i]){ const r = find(i); size[r] = (size[r] || 0) + 1; }
@@ -1649,13 +1822,13 @@ function harmony(){
     if (!S.sill[i]) continue;
     const r = find(i);
     if (size[r] < 2) continue;                       // a lone flower keeps a plain pot
-    if (!(r in seat)) seat[r] = next++ % GLAZES.length;
+    if (!(r in seat)) seat[r] = next++ % POTS().length;
     glazeOf[i] = seat[r];
   }
 
   const mult = Math.min(CFG.harmonyCap,
     1 + sum + shelves*CFG.shelfAccord + (full ? CFG.fullSill : 0) + decorOn*CFG.decorBonus);
-  return { bonds, tally, pairs: bonds.length, shelves, full, decorOn,
+  return { bonds, tally, pairs: bonds.length, shelves, full, decorOn, decorFilled,
            groups: next, glazeOf, mult, root: find };
 }
 function bondsAt(i, hm){
@@ -1722,9 +1895,16 @@ function updateHUD(){
   const sick = S.sill.filter(ailing).length;
   $('#pTonic').textContent = '✚ ' + S.tonics + (sick ? '  ·  ' + sick + '!' : '');
   $('#pTonic').style.color = sick && !S.tonics ? '#9C6B5A' : '';
+  /* Five pills is one more than a 360px phone has room for, so the petal count
+     abbreviates rather than wrapping the row onto a second line — and it steps
+     out of the way entirely on the catalogue, which prints it in the header. */
+  const pn = S.petals >= 10000 ? (S.petals/1000).toFixed(1) + 'k' : String(S.petals);
+  $('#pPetal').innerHTML = '❦ <b>' + pn + '</b>';
+  $('#pPetal').style.display = V.screen === 'shop' ? 'none' : '';
   $('#pMail').title = 'Parcels waiting';
   $('#pHarm').title = 'How fast parcels arrive';
   $('#pStreak').title = 'Days in a row';
+  $('#pPetal').title = 'Pressed petals';
 }
 function mmss(ms){
   const m = Math.floor(ms/60000), sec = Math.floor(ms/1000) % 60;
@@ -1751,7 +1931,8 @@ function explainHarmony(){
   const parts = BONDS.filter(b => hm.tally[b.id]).map(b => hm.tally[b.id] + ' ' + b.name.toLowerCase());
   if (hm.shelves) parts.push(hm.shelves + (hm.shelves === 1 ? ' shelf' : ' shelves') + ' in accord');
   if (hm.full) parts.push('a full sill');
-  if (hm.decorOn) parts.push(hm.decorOn + ' on the ledge');
+  if (hm.decorOn) parts.push(hm.decorOn + ' on the ledge' +
+      (hm.decorFilled > hm.decorOn ? ' (the ledge pays for three; the rest are for show)' : ''));
   note('Parcels arrive ×' + hm.mult.toFixed(2) + ' faster — ' + parts.join(', ') +
        '. That is one every ' + mmss(CFG.parcelIntervalMs/hm.mult) + '.', 4600);
 }
@@ -1768,6 +1949,14 @@ function explainTonic(){
   if (!sick.length) parts.push('Nothing on the sill needs one. Tap an ailing flower to spend it.');
   note(parts.join(' '), 5200);
 }
+function explainPetals(){
+  const bits = [S.petals + ' pressed ' + (S.petals === 1 ? 'petal' : 'petals') + '.'];
+  bits.push('A flower already in the book leaves petals behind when it arrives, and so does ' +
+            'one that finishes its season on the sill. A flower lost to illness leaves nothing.');
+  if (S.seed) bits.push(SP[S.seed].name + ' is sown and comes with the next parcel.');
+  bits.push('Spend them under <b>Order</b>.');
+  note(bits.join(' '), 6000);
+}
 function explainStreak(){
   note(S.streak + (S.streak === 1 ? ' day' : ' days') + ' in a row. A day missed only wilts it ' +
        '— it halves, it never resets to nothing.', 4000);
@@ -1776,8 +1965,11 @@ $('#pMail').onclick   = () => { Snd.resume(); explainMail(); };
 $('#pHarm').onclick   = () => { Snd.resume(); explainHarmony(); };
 $('#pStreak').onclick = () => { Snd.resume(); explainStreak(); };
 $('#pTonic').onclick   = () => { Snd.resume(); explainTonic(); };
+$('#pPetal').onclick   = () => { Snd.resume(); explainPetals(); };
 function setScreen(s){
+  if (s !== 'shop') V.armedBuy = null;
   V.screen = s;
+  updateHUD();
   document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.s === s));
 }
 document.querySelectorAll('#tabs button').forEach(b => b.onclick = () => {
@@ -1808,13 +2000,23 @@ function openParcel(){
   const und = undiscovered();
   const due = storyDue();
   V.genome = null; V.story = null; V.decor = null; V.tonic = false; V.special = false;
+  V.sown = null; V.petalsGot = 0;
   if (due){
     // A letter outranks everything, and does not burn the day's special delivery.
     V.story = due;
   } else {
     V.special = !!S.specialPending;
     S.specialPending = false;
-    if (V.special && und.length){
+    if (S.seed && SP[S.seed]){
+      /* A sown packet outranks everything but a letter, including the day's
+         special delivery — it was paid for, and it must never be quietly
+         skipped. If the two land on the same parcel the packet simply arrives
+         at the special's better rarity instead of being spent on nothing. */
+      V.genome = makeGenome(r, V.special ? { sp: S.seed, ra: r() < 0.55 ? 'rare' : 'uncommon' }
+                                         : { sp: S.seed });
+      V.sown = SP[S.seed].name;
+      S.seed = null;
+    } else if (V.special && und.length){
       V.genome = makeGenome(r, { sp: pick(r, und).id, ra: r() < 0.55 ? 'rare' : 'uncommon' });
     } else if (r() < CFG.tonicChance){
       V.tonic = true;
@@ -1871,6 +2073,13 @@ function completeParcel(){
     const rec = recordFlower(g);
     V.isNewSpecies = rec.newSpecies;
     V.isNewVariant = rec.newVariant;
+    // A flower you already had used to be worth a counter and nothing else.
+    // Now it is worth petals, which is what keeps the late game moving once
+    // the book stops surprising you.
+    V.petalsGot = (rec.newSpecies || rec.newVariant)
+      ? CFG.petal.first
+      : (CFG.petal.dup[rar] || 1);
+    S.petals += V.petalsGot;
     S.opened++;
     S.pity = (rar === 'rare' || rar === 'legendary') ? 0 : S.pity + 1;
     Snd.chime(rar);
@@ -1917,11 +2126,15 @@ function showSheet(){
     $('#bBook').classList.remove('hi');
   } else {
     const g = V.genome, ra = RA[g.ra];
-    $('#shRar').textContent = (V.special ? 'SPECIAL DELIVERY · ' : '') + ra.name.toUpperCase();
+    $('#shRar').textContent = (V.sown ? 'FROM YOUR OWN PACKET · ' : V.special ? 'SPECIAL DELIVERY · ' : '') +
+                              ra.name.toUpperCase();
     $('#shRar').style.color = ra.col;
     $('#shName').innerHTML = flowerName(g) + (V.isNewSpecies ? '<span class="new">NEW</span>'
                                               : V.isNewVariant ? '<span class="new">NEW HUE</span>' : '');
-    $('#shMu').textContent = g.mu ? MUTATIONS.find(m=>m.id===g.mu).name : '';
+    const mbits = [];
+    if (g.mu) mbits.push(MUTATIONS.find(m=>m.id===g.mu).name);
+    if (V.petalsGot) mbits.push('+' + V.petalsGot + ' petal' + (V.petalsGot === 1 ? '' : 's'));
+    $('#shMu').textContent = mbits.join('  ·  ');
     $('#shPoem').textContent = SP[g.sp].poem;
     $('#bSill').style.display = '';
     $('#bSill').textContent = 'Put on the sill';
@@ -2021,6 +2234,7 @@ cv.addEventListener('pointerdown', e => {
     return;
   }
   if (V.screen === 'book'){ V.bookDrag = p.y; V.bookDrag0 = V.bookScroll; V.bookMoved = false; }
+  if (V.screen === 'shop'){ V.shopDrag = p.y; V.shopDrag0 = V.shopScroll; V.shopMoved = false; }
 });
 cv.addEventListener('pointermove', e => {
   const p = pos(e);
@@ -2034,6 +2248,9 @@ cv.addEventListener('pointermove', e => {
     V.grab.x = p.x; V.grab.y = p.y;
     // a small threshold keeps a tap an inspection, not a fumbled drag
     if (!V.grab.moved && Math.hypot(p.x - V.grab.x0, p.y - V.grab.y0) > 8) V.grab.moved = true;
+  } else if (V.screen === 'shop' && V.shopDrag !== null){
+    if (Math.abs(p.y - V.shopDrag) > 6) V.shopMoved = true;
+    V.shopScroll = V.shopDrag0 - (p.y - V.shopDrag);
   } else if (V.screen === 'book' && V.bookDrag !== null){
     if (Math.abs(p.y - V.bookDrag) > 6) V.bookMoved = true;
     V.bookScroll = V.bookDrag0 - (p.y - V.bookDrag);
@@ -2046,7 +2263,8 @@ function endPointer(e){
   const L = (V.screen === 'table' && V.mode === 'unwrap') ? activeLayer() : null;
   if (L) GES[L.kind].up(L, input.p, V.box);
   if (V.screen === 'book' && V.bookDrag !== null && !V.bookMoved) inspectBook(input.p);
-  V.bookDrag = null;
+  if (V.screen === 'shop' && V.shopDrag !== null && !V.shopMoved) shopTap(input.p);
+  V.bookDrag = null; V.shopDrag = null;
 
   const gb = V.grab; V.grab = null;
   if (!gb) return;
@@ -2100,8 +2318,9 @@ cv.addEventListener('lostpointercapture', endPointer);
 // Drag-scrolling alone left the foot of the page unreachable by the gesture a
 // desktop player actually reaches for.
 cv.addEventListener('wheel', e => {
-  if (V.screen !== 'book') return;
-  V.bookScroll += e.deltaMode === 1 ? e.deltaY * 18 : e.deltaY;
+  if (V.screen !== 'book' && V.screen !== 'shop') return;
+  const d = e.deltaMode === 1 ? e.deltaY * 18 : e.deltaY;
+  if (V.screen === 'book') V.bookScroll += d; else V.shopScroll += d;
   e.preventDefault();
 }, { passive: false });
 cv.addEventListener('contextmenu', e => e.preventDefault());
@@ -2141,15 +2360,44 @@ function skyColors(){
   if (h < 20) return ['#EBD4BA','#DFD9D2','dusk'];
   return ['#B8C0C6','#D6D7D2','night'];
 }
+function wallMotif(ctx, motif){
+  // Every motif is drawn at the same whisper. What changes between papers is
+  // the figure, never the contrast — a paper you paid for must not start
+  // shouting over the flowers.
+  ctx.fillStyle = 'rgba(74,66,56,.016)';
+  if (motif === 'stripe'){
+    for (let x = 0; x < W; x += 38) ctx.fillRect(x, 0, 18, H);
+  } else if (motif === 'check'){
+    for (let x = 0; x < W; x += 34) ctx.fillRect(x, 0, 17, H);
+    for (let y = 0; y < H; y += 34) ctx.fillRect(0, y, W, 17);
+  } else if (motif === 'sprig'){
+    // printed slightly out of register, which is what makes it read as printed
+    const r = mulberry32(8181);
+    ctx.strokeStyle = 'rgba(74,66,56,.05)'; ctx.lineWidth = 1.1;
+    for (let y = -20; y < H + 20; y += 52){
+      for (let x = -20; x < W + 20; x += 46){
+        const jx = x + r()*5, jy = y + r()*5, a = r()*0.7 - 0.35;
+        ctx.save(); ctx.translate(jx, jy); ctx.rotate(a);
+        ctx.beginPath(); ctx.moveTo(0, -9); ctx.lineTo(0, 9); ctx.stroke();
+        for (let k = -1; k <= 1; k++){
+          ctx.beginPath();
+          ctx.ellipse(4.2, k*5.4, 3.6, 1.7, 0.5, 0, TAU); ctx.fill();
+          ctx.beginPath();
+          ctx.ellipse(-4.2, k*5.4, 3.6, 1.7, -0.5, 0, TAU); ctx.fill();
+        }
+        ctx.restore();
+      }
+    }
+  }
+}
 function paintRoom(ctx, kind){
   const [s1, s2, when] = skyColors();
+  const PP_ = paper();
   const wg = ctx.createLinearGradient(0, 0, 0, H);
-  wg.addColorStop(0, '#DAD5CA'); wg.addColorStop(0.58, MOR.wall); wg.addColorStop(1, MOR.wallLo);
+  wg.addColorStop(0, '#DAD5CA'); wg.addColorStop(0.58, PP_.wall); wg.addColorStop(1, PP_.wallLo);
   ctx.fillStyle = wg; ctx.fillRect(0, 0, W, H);
 
-  // wallpaper: a barely-there stripe, the kind you only notice in good light
-  ctx.fillStyle = 'rgba(74,66,56,.016)';
-  for (let x = 0; x < W; x += 38) ctx.fillRect(x, 0, 18, H);
+  wallMotif(ctx, PP_.motif);
 
   const wx = kind === 'shelf' ? W*0.07 : W*0.12, ww = kind === 'shelf' ? W*0.86 : W*0.76,
         wy = kind === 'shelf' ? H*0.155 : H*0.072,
@@ -2157,7 +2405,7 @@ function paintRoom(ctx, kind){
 
   ctx.fillStyle = 'rgba(122,106,86,.14)';                 // frame shadow on the wall
   rr(ctx, wx - 7, wy - 5, ww + 14, wh + 20, 6); ctx.fill();
-  ctx.fillStyle = MOR.frame; rr(ctx, wx - 9, wy - 9, ww + 18, wh + 18, 5); ctx.fill();
+  ctx.fillStyle = PP_.frame; rr(ctx, wx - 9, wy - 9, ww + 18, wh + 18, 5); ctx.fill();
   ctx.fillStyle = 'rgba(255,252,244,.3)'; rr(ctx, wx - 9, wy - 9, ww + 18, 5, 3); ctx.fill();
 
   const sg = ctx.createLinearGradient(0, wy, 0, wy + wh);
@@ -2187,18 +2435,18 @@ function paintRoom(ctx, kind){
     }
   }
   ctx.restore();
-  ctx.strokeStyle = MOR.frame; ctx.lineWidth = 7;
+  ctx.strokeStyle = PP_.frame; ctx.lineWidth = 7;
   ctx.beginPath(); ctx.moveTo(wx + ww/2, wy); ctx.lineTo(wx + ww/2, wy + wh); ctx.stroke();
   if (kind !== 'shelf'){ ctx.beginPath(); ctx.moveTo(wx, wy + wh/2); ctx.lineTo(wx + ww, wy + wh/2); ctx.stroke(); }
   ctx.strokeStyle = 'rgba(74,66,56,.12)'; ctx.lineWidth = 1;
   ctx.strokeRect(wx, wy, ww, wh);
 
   if (kind === 'table'){
-    ctx.fillStyle = MOR.sill; rr(ctx, wx - 20, wy + wh + 8, ww + 40, 13, 3); ctx.fill();
+    ctx.fillStyle = PP_.sill; rr(ctx, wx - 20, wy + wh + 8, ww + 40, 13, 3); ctx.fill();
     ctx.fillStyle = 'rgba(122,106,86,.16)'; ctx.fillRect(wx - 20, wy + wh + 21, ww + 40, 4);
 
     const tg = ctx.createLinearGradient(0, H*0.5, 0, H);
-    tg.addColorStop(0, MOR.wood); tg.addColorStop(1, MOR.woodDk);
+    tg.addColorStop(0, PP_.wood); tg.addColorStop(1, PP_.woodDk);
     ctx.fillStyle = tg; ctx.fillRect(0, H*0.53, W, H*0.47);
     ctx.fillStyle = 'rgba(69,62,52,.18)'; ctx.fillRect(0, H*0.53, W, 1.5);
     // a soft pool rather than a trapezoid — the straight edges read as a shape
@@ -2225,7 +2473,7 @@ function paintRoom(ctx, kind){
 const room = { key: '', cv: null, cx: null };
 function drawBackdrop(kind){
   const w = Math.round(W*DPR), h = Math.round(H*DPR);
-  const key = [kind, w, h, new Date().getHours(),
+  const key = [kind, w, h, new Date().getHours(), S.paper,
                reduceMotion ? 0 : Math.floor(V.t * CFG.boil.fps)].join('|');
   if (room.key !== key){
     if (!room.cv) room.cv = document.createElement('canvas');
@@ -2367,13 +2615,18 @@ function shelfGeom(){
   return { x0: W*0.21, dx: W*0.29, y0: H*0.335, dy: H*0.16,
            slot(i){ return { x: this.x0 + this.dx*(i%3), y: this.y0 + this.dy*Math.floor(i/3) }; } };
 }
+/* The ledge is centred rather than anchored, so growing it from three places
+   to five re-composes the row instead of pushing it off the end. At three the
+   numbers come out identical to the hand-placed layout they replace. */
 function ledgeGeom(){
-  return { y: H*0.765, x0: W*0.27, dx: W*0.23,
+  const n = ledgeSlots();
+  const dx = n <= LEDGE_SHORT ? W*0.23 : W*0.175;
+  return { n, r: n <= LEDGE_SHORT ? 21 : 17, y: H*0.765, x0: W/2 - dx*(n - 1)/2, dx,
            slot(i){ return { x: this.x0 + this.dx*i, y: this.y }; } };
 }
 function ledgeAt(p){
   const g = ledgeGeom();
-  for (let i=0;i<3;i++){
+  for (let i=0;i<g.n;i++){
     const s = g.slot(i);
     if (Math.abs(p.x - s.x) < g.dx*0.46 && p.y > s.y - 40 && p.y < s.y + 14) return i;
   }
@@ -2397,7 +2650,7 @@ function drawShelf(){
   for (let row=0; row<3; row++){
     const y = g.y0 + g.dy*row + 6;
     ctx.fillStyle = 'rgba(112,96,76,.16)'; ctx.fillRect(W*0.06, y + 9, W*0.88, 5);
-    ctx.fillStyle = MOR.sill; rr(ctx, W*0.06, y, W*0.88, 9, 3); ctx.fill();
+    ctx.fillStyle = paper().sill; rr(ctx, W*0.06, y, W*0.88, 9, 3); ctx.fill();
     ctx.fillStyle = 'rgba(255,252,244,.28)'; rr(ctx, W*0.06, y, W*0.88, 3, 1.5); ctx.fill();
   }
 
@@ -2450,7 +2703,7 @@ function drawShelf(){
   for (const bd of hm.bonds){
     if (grab && (grab.idx === bd.i || grab.idx === bd.j)) continue;
     const s1 = g.slot(bd.i), s2 = g.slot(bd.j);
-    const col = GLAZES[hm.glazeOf[bd.i] >= 0 ? hm.glazeOf[bd.i] : 0].rim;
+    const col = POTS()[hm.glazeOf[bd.i] >= 0 ? hm.glazeOf[bd.i] : 0].rim;
     if (bd.vertical) bondGlyph(ctx, BD[bd.tier].glyph, s1.x, s1.y + 14, col, 6);
     else             bondGlyph(ctx, BD[bd.tier].glyph, (s1.x + s2.x)/2, s1.y - 4, col, 6.6);
   }
@@ -2458,19 +2711,19 @@ function drawShelf(){
   // the window ledge, for things that are not flowers
   const ly = lg.y;
   ctx.fillStyle = 'rgba(112,96,76,.16)'; ctx.fillRect(W*0.08, ly + 13, W*0.84, 6);
-  ctx.fillStyle = MOR.sill; rr(ctx, W*0.08, ly, W*0.84, 13, 3.5); ctx.fill();
+  ctx.fillStyle = paper().sill; rr(ctx, W*0.08, ly, W*0.84, 13, 3.5); ctx.fill();
   ctx.fillStyle = 'rgba(255,253,247,.3)'; rr(ctx, W*0.08, ly, W*0.84, 4, 2); ctx.fill();
-  for (let i=0;i<3;i++){
+  for (let i=0;i<lg.n;i++){
     const s = lg.slot(i), id = S.decor[i];
     const lifted = grab && grab.kind === 'decor' && grab.idx === i;
     if (id && !lifted){
-      drawDecor(ctx, id, s.x, s.y - 12, 21);
+      drawDecor(ctx, id, s.x, s.y - 12, lg.r);
     } else {
       const live = V.placing === 'decor' || lifted || hoverLedge === i;
       ctx.strokeStyle = live ? `rgba(152,124,62,${0.6 + Math.sin(V.t*4 + i)*0.28})`
                              : 'rgba(86,75,60,.2)';
       ctx.lineWidth = hoverLedge === i ? 2.6 : 1.7; ctx.setLineDash([4,5]);
-      ctx.beginPath(); ctx.arc(s.x, s.y - 12, 19, 0, TAU); ctx.stroke();
+      ctx.beginPath(); ctx.arc(s.x, s.y - 12, lg.r - 2, 0, TAU); ctx.stroke();
       ctx.setLineDash([]);
     }
   }
@@ -2687,6 +2940,427 @@ function drawBook(){
 }
 
 /* ============================================================
+   THE CATALOGUE
+   ============================================================
+   Everything the game will ever sell is in this one section, and it is short
+   on purpose. Three rules hold it together:
+
+   1. NOTHING FOR SALE TOUCHES THE RATE. Glazes and papers are paint. The long
+      ledge is display space — it pays for its first three ornaments whether it
+      holds three or five (CFG.ledgePays). A seed packet fills a gap in the book.
+      None of them makes a parcel arrive sooner, which means no A/B test can
+      ever find that making the game worse sells better.
+
+   2. NO TONICS, EVER. Selling relief from a loss the game engineered is the one
+      thing that would convert best and cost most. It is also why illness has no
+      `illChance` constant to quietly raise — see illRisk().
+
+   3. EVERYTHING IS REACHABLE WITH PETALS. Money buys petals faster; it does not
+      buy anything petals cannot. A player who never pays anything still gets
+      to every glaze, every paper and the long ledge.
+   ============================================================ */
+
+/* One seam for real money. The demo provider is what runs in a browser; the
+   other two are where a platform SDK is wired in, and both need a bot or
+   mini-programme backend to mint the invoice, so neither can work from a
+   static file alone. */
+const PAY = {
+  provider: 'demo',                  // 'demo' | 'telegram' | 'wx'
+  packs: [
+    { id:'pouch', name:'A paper pouch',  petals: 400,  price:'0.99', stars: 75  },
+    { id:'tin',   name:'A tin of petals', petals:1200, price:'2.99', stars: 225, best:true },
+    { id:'crate', name:'A crate of them', petals:3000, price:'6.99', stars: 525 },
+  ],
+  label(pack){
+    return this.provider === 'telegram' ? pack.stars + ' ★' : '$' + pack.price;
+  },
+  buy(pack, done){
+    if (this.provider === 'telegram'){
+      // Telegram Stars. The invoice link has to be created by the bot backend
+      // (createInvoiceLink), because only the bot holds the token.
+      const tg = window.Telegram && window.Telegram.WebApp;
+      if (!tg || !tg.openInvoice){ done(false, 'Telegram is not available here.'); return; }
+      fetch('/invoice?pack=' + pack.id).then(r => r.text()).then(url => {
+        tg.openInvoice(url, st => done(st === 'paid', st));
+      }).catch(() => done(false, 'The invoice could not be created.'));
+      return;
+    }
+    if (this.provider === 'wx'){
+      done(false, 'Virtual payment on a mini game needs a game licence.');
+      return;
+    }
+    // demo: no money changes hands, and the button says so
+    done(true, 'demo');
+  },
+};
+
+function owns(kind, id){
+  const it = kind === 'glaze' ? GS[id] : PA[id];
+  return !it || it.price === 0 || !!S.owned[kind + ':' + id];
+}
+function spend(n){
+  if (S.petals < n) return false;
+  S.petals -= n; S.spent += n;
+  return true;
+}
+/* Buying and applying are one tap in this game, because there is no reason to
+   own a glaze you are not using. The second tap of the arm/confirm pair is the
+   purchase, so nothing is ever bought by a mis-tap. */
+function buyCosmetic(kind, id){
+  const it = kind === 'glaze' ? GS[id] : PA[id];
+  if (!it) return false;
+  if (!owns(kind, id)){
+    if (!spend(it.price)){
+      note('That is ' + (it.price - S.petals) + ' more petals than you have. ' +
+           'Flowers you already know pay petals when they arrive.', 4200);
+      return false;
+    }
+    S.owned[kind + ':' + id] = 1;
+    Snd.chime('rare');
+    note('<b>' + it.name + '</b> is yours.', 2600);
+  } else {
+    Snd.press();
+  }
+  if (kind === 'glaze') S.glaze = id; else S.paper = id;
+  room.key = '';                       // the room is cached; make it repaint
+  updateHUD(); save();
+  return true;
+}
+function buyLedge(){
+  if (S.ledge) return false;
+  if (!spend(CFG.shop.ledge)){
+    note('The long ledge is ' + (CFG.shop.ledge - S.petals) + ' petals away yet.', 3600);
+    return false;
+  }
+  S.ledge = true;
+  while (S.decor.length < ledgeSlots()) S.decor.push(null);
+  Snd.chime('legendary');
+  note('The ledge runs the whole width of the window now. Two more places to ' +
+       'stand things — for the look of it, not for the speed.', 5000);
+  updateHUD(); save();
+  return true;
+}
+function sowSeed(spId){
+  if (!SP[spId]) return false;
+  if (S.seed){ note('A packet is already sown. It comes with the next parcel.', 3000); return false; }
+  if (!spend(CFG.shop.seed)){
+    note('A packet is ' + CFG.shop.seed + ' petals. You have ' + S.petals + '.', 3400);
+    return false;
+  }
+  S.seed = spId;
+  Snd.chime('rare');
+  note('<b>' + SP[spId].name + '</b> sown. It will be in the next parcel you open.', 4200);
+  updateHUD(); save();
+  return true;
+}
+function buyPetals(pack){
+  PAY.buy(pack, (okp, why) => {
+    if (!okp){ note(why || 'Nothing was charged.', 3600); return; }
+    S.petals += pack.petals;
+    Snd.chime('legendary');
+    note('+' + pack.petals + ' petals' + (why === 'demo' ? ' &nbsp;·&nbsp; <i>demo — nothing was charged</i>' : '') + '.', 4000);
+    updateHUD(); save();
+  });
+}
+
+/* ---------- swatches: you should be able to see what you are buying ---------- */
+function potSwatch(ctx, set, x, y, k){
+  for (let i = 0; i < set.pots.length; i++){
+    // drawn straight from the same table the sill uses, so the preview cannot
+    // drift away from the thing itself
+    const g = set.pots[i], px = x + i*17*k;
+    ctx.fillStyle = g.body; potPath(ctx, px, y, 0.62*k); ctx.fill();
+    ctx.fillStyle = g.rim;  rr(ctx, px - 8.4*k, y - 6.8*k, 16.8*k, 3.1*k, 1*k); ctx.fill();
+  }
+}
+function paperSwatch(ctx, pa, x, y, w, h){
+  ctx.save();
+  ctx.beginPath(); rr(ctx, x, y, w, h, 5); ctx.clip();
+  const g = ctx.createLinearGradient(0, y, 0, y + h);
+  g.addColorStop(0, pa.wall); g.addColorStop(1, pa.wallLo);
+  ctx.fillStyle = g; ctx.fillRect(x, y, w, h);
+  ctx.fillStyle = 'rgba(74,66,56,.055)';
+  if (pa.motif === 'stripe'){
+    for (let i = x; i < x + w; i += 10) ctx.fillRect(i, y, 4.5, h);
+  } else if (pa.motif === 'check'){
+    for (let i = x; i < x + w; i += 10) ctx.fillRect(i, y, 4.5, h);
+    for (let j = y; j < y + h; j += 10) ctx.fillRect(x, j, w, 4.5);
+  } else if (pa.motif === 'sprig'){
+    for (let j = y + 5; j < y + h; j += 13){
+      for (let i = x + 6; i < x + w; i += 12){
+        ctx.beginPath(); ctx.ellipse(i, j, 3, 1.4, 0.6, 0, TAU); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(i + 4, j + 4, 3, 1.4, -0.6, 0, TAU); ctx.fill();
+      }
+    }
+  }
+  // a window in it, so the swatch reads as a room rather than a colour chip
+  const ww = w*0.56, wh = h*0.44, wx = x + (w - ww)/2, wy = y + h*0.16;
+  ctx.fillStyle = pa.frame; rr(ctx, wx - 3, wy - 3, ww + 6, wh + 6, 3); ctx.fill();
+  const sky = ctx.createLinearGradient(0, wy, 0, wy + wh);
+  const sk = skyColors();
+  sky.addColorStop(0, sk[0]); sky.addColorStop(1, sk[1]);
+  ctx.fillStyle = sky; ctx.fillRect(wx, wy, ww, wh);
+  ctx.fillStyle = pa.sill; rr(ctx, wx - 7, wy + wh + 4, ww + 14, 4.5, 2); ctx.fill();
+  ctx.fillStyle = pa.wood; ctx.fillRect(x, y + h*0.8, w, h*0.2);
+  ctx.restore();
+  ctx.strokeStyle = 'rgba(69,62,52,.15)'; ctx.lineWidth = 1;
+  rr(ctx, x, y, w, h, 5); ctx.stroke();
+}
+function petalGlyph(ctx, x, y, r, col){
+  ctx.fillStyle = col;
+  for (let i = 0; i < 4; i++){
+    const a = i*Math.PI/2 + 0.4;
+    ctx.beginPath();
+    ctx.ellipse(x + Math.cos(a)*r*0.5, y + Math.sin(a)*r*0.5, r*0.5, r*0.28, a, 0, TAU);
+    ctx.fill();
+  }
+}
+
+/* ---------- laid out first, drawn second, exactly like the herbarium ---------- */
+function shopLayout(){
+  const top = H*0.205, pad = 15, w = W - pad*2;
+  const L = { top, pad, w, rows: [], heads: [] };
+  let y = 0;
+  const head = t => { L.heads.push({ t, y }); y += 32; };
+
+  head('Pots');
+  for (const g of GLAZE_SETS){
+    L.rows.push({ kind:'glaze', id:g.id, x:pad, y, w, h:84, it:g });
+    y += 90;
+  }
+  head('Papers');
+  for (const a of PAPERS){
+    L.rows.push({ kind:'paper', id:a.id, x:pad, y, w, h:84, it:a });
+    y += 90;
+  }
+  head('The Ledge');
+  L.rows.push({ kind:'ledge', id:'ledge', x:pad, y, w, h:84 });
+  y += 90;
+
+  head('Seed Packets');
+  const miss = undiscovered();
+  L.seedY = y;
+  L.seedLines = wrapText(
+    S.seed ? SP[S.seed].name + ' is sown, and comes with the next parcel you open.'
+    : !miss.length ? 'Every species is in the book. Nothing left to send for.'
+    : 'Name a species you have never been sent. ' + CFG.shop.seed + ' petals, and it comes next.',
+    w - 30, 12.5, F_SANS);
+  y += 18 + L.seedLines.length*17*UI.s;
+  if (miss.length && !S.seed){
+    const per = Math.max(2, Math.floor(w / 118)), cw = w/per, chH = 34;
+    miss.forEach((sp, i) => {
+      L.rows.push({ kind:'seed', id:sp.id, x: pad + cw*(i % per) + 3,
+                    y: y + Math.floor(i/per)*chH, w: cw - 6, h: chH - 5, it: sp });
+    });
+    y += Math.ceil(miss.length/per)*chH + 6;
+  }
+
+  head('Petals');
+  for (const k of PAY.packs){
+    L.rows.push({ kind:'pack', id:k.id, x:pad, y, w, h:64, it:k });
+    y += 70;
+  }
+  L.noteY = y;
+  L.noteLines = wrapText(
+    'Not for sale, and never will be: tonics, faster parcels, a bigger sill, or anything ' +
+    'else that undoes a loss. Everything above is paint, shelf space or a seed — and every ' +
+    'one of them can be had with petals alone.', w - 24, 12, F_SERIF);
+  y += L.noteLines.length*18*UI.s + 26;
+
+  L.total = y;
+  L.maxScroll = Math.max(0, (top + y + 152) - H);
+  return L;
+}
+function shopHit(p){
+  const L = shopLayout(), y = p.y - L.top + V.shopScroll;
+  for (const r of L.rows)
+    if (p.x >= r.x && p.x <= r.x + r.w && y >= r.y && y <= r.y + r.h) return r;
+  return null;
+}
+/* Two taps to spend anything, the same as a tonic. The first tap says what it
+   costs; the second is the purchase. */
+function shopTap(p){
+  const r = shopHit(p);
+  if (!r) return;
+  const key = r.kind + ':' + r.id;
+  const armed = V.armedBuy && V.armedBuy.key === key && Date.now() < V.armedBuy.until;
+
+  if (r.kind === 'glaze' || r.kind === 'paper'){
+    if (owns(r.kind, r.id)){                       // already yours: just put it on
+      if ((r.kind === 'glaze' ? S.glaze : S.paper) === r.id) note(r.it.note, 3200);
+      else buyCosmetic(r.kind, r.id);
+      return;
+    }
+    if (armed){ V.armedBuy = null; buyCosmetic(r.kind, r.id); return; }
+    V.armedBuy = { key, until: Date.now() + 5000 };
+    note('<b>' + r.it.name + '</b> · ' + r.it.price + ' petals. ' + r.it.note +
+         '<br>Tap again to buy it. You have ' + S.petals + '.', 5000);
+    return;
+  }
+  if (r.kind === 'ledge'){
+    if (S.ledge){ note('The long ledge is already yours.', 2400); return; }
+    if (armed){ V.armedBuy = null; buyLedge(); return; }
+    V.armedBuy = { key, until: Date.now() + 5000 };
+    note('<b>The long ledge</b> · ' + CFG.shop.ledge + ' petals. Two more places to stand ' +
+         'things. It does not make parcels come faster — the ledge pays for three ' +
+         'ornaments however long it is.<br>Tap again to buy it. You have ' + S.petals + '.', 6000);
+    return;
+  }
+  if (r.kind === 'seed'){
+    if (armed){ V.armedBuy = null; sowSeed(r.id); return; }
+    V.armedBuy = { key, until: Date.now() + 5000 };
+    note('<b>' + r.it.name + '</b> · ' + CFG.shop.seed + ' petals. ' + SP[r.id].poem +
+         '<br>Tap again to sow it. You have ' + S.petals + '.', 5600);
+    return;
+  }
+  if (r.kind === 'pack'){
+    if (armed){ V.armedBuy = null; buyPetals(r.it); return; }
+    V.armedBuy = { key, until: Date.now() + 5000 };
+    note('<b>' + r.it.petals + ' petals</b> for ' + PAY.label(r.it) +
+         (PAY.provider === 'demo' ? ' &nbsp;·&nbsp; <i>demo build: nothing is charged</i>' : '') +
+         '<br>Tap again.', 5000);
+  }
+}
+
+function drawShop(){
+  drawPageBg();
+  const L = shopLayout();
+  V.shopScroll = clamp(V.shopScroll, 0, L.maxScroll);
+  const sc = V.shopScroll, top = L.top;
+  const now = Date.now();
+  const isArmed = k => V.armedBuy && V.armedBuy.key === k && now < V.armedBuy.until;
+
+  ctx.save();
+  ctx.beginPath(); ctx.rect(0, top - 16, W, H - top + 16); ctx.clip();
+
+  for (const h of L.heads){
+    const y = h.y + top - sc;
+    if (y < top - 40 || y > H + 20) continue;
+    txt(h.t, W/2, y + 20, 15, MOR.ink2, F_SERIF);
+  }
+
+  // the seed blurb sits between its heading and its chips
+  {
+    const y = L.seedY + top - sc;
+    if (y > top - 60 && y < H + 40)
+      L.seedLines.forEach((ln, k) =>
+        txt(ln, W/2, y + 14 + k*17*UI.s, 12.5, MOR.ink3, F_SANS));
+  }
+
+  for (const r of L.rows){
+    const y = r.y + top - sc;
+    if (y > H + 80 || y < top - r.h - 80) continue;
+    const arm = isArmed(r.kind + ':' + r.id);
+
+    if (r.kind === 'seed'){                            // a chip, not a card
+      ctx.fillStyle = arm ? 'rgba(190,159,99,.26)' : 'rgba(255,253,247,.66)';
+      rr(ctx, r.x, y, r.w, r.h, 8); ctx.fill();
+      ctx.strokeStyle = arm ? MOR.ochre : 'rgba(69,62,52,.14)';
+      ctx.lineWidth = arm ? 1.8 : 1; ctx.stroke();
+      txt(r.it.name, r.x + r.w/2, y + r.h/2 + 4.5, 12.5, MOR.ink, F_SERIF);
+      continue;
+    }
+
+    const have = r.kind === 'ledge' ? S.ledge
+               : r.kind === 'pack'  ? false
+               : owns(r.kind, r.id);
+    const on   = r.kind === 'glaze' ? S.glaze === r.id
+               : r.kind === 'paper' ? S.paper === r.id : false;
+    const price = r.kind === 'ledge' ? CFG.shop.ledge
+                : r.kind === 'pack'  ? null : r.it.price;
+    const canAfford = price == null || S.petals >= price;
+
+    ctx.fillStyle = on ? 'rgba(255,253,247,.9)' : 'rgba(255,253,247,.6)';
+    rr(ctx, r.x, y, r.w, r.h, 11); ctx.fill();
+    ctx.strokeStyle = arm ? MOR.ochre : on ? 'rgba(148,120,58,.5)' : 'rgba(69,62,52,.13)';
+    ctx.lineWidth = arm ? 2.2 : on ? 1.8 : 1; ctx.stroke();
+
+    // --- preview ---
+    const px = r.x + 16, pcy = y + r.h/2;
+    if (r.kind === 'glaze')      potSwatch(ctx, r.it, px + 4, pcy + 6, 0.95);
+    else if (r.kind === 'paper') paperSwatch(ctx, r.it, px, y + 14, 74, r.h - 28);
+    else if (r.kind === 'ledge'){
+      ctx.fillStyle = paper().sill; rr(ctx, px, pcy + 10, 74, 6, 3); ctx.fill();
+      for (let i = 0; i < 5; i++){
+        const cx2 = px + 9 + i*14.5;
+        ctx.fillStyle = i < 3 ? MOR.ink3 : (S.ledge ? MOR.ochre : 'rgba(69,62,52,.16)');
+        ctx.beginPath(); ctx.arc(cx2, pcy + 1, 4.6, 0, TAU); ctx.fill();
+      }
+    } else if (r.kind === 'pack'){
+      petalGlyph(ctx, px + 20, pcy, 19, MOR.ochre);
+    }
+
+    // --- name, note ---
+    const tx = r.x + (r.kind === 'pack' ? 54 : 102);
+    const name = r.kind === 'ledge' ? 'The Long Ledge'
+               : r.kind === 'pack'  ? r.it.petals + ' petals' : r.it.name;
+    ctx.textAlign = 'left';
+    txt(name, tx, y + 27, 15, MOR.ink, F_SERIF, 'left');
+    const note0 = r.kind === 'ledge'
+      ? 'Five places instead of three. For the look of it — the ledge still pays for three.'
+      : r.kind === 'pack' ? (r.it.best ? 'The one most people take.' : r.it.name) : r.it.note;
+    wrapText(note0, r.w - (tx - r.x) - 96, 11.5, F_SANS)
+      .slice(0, 3)
+      .forEach((ln, k) => txt(ln, tx, y + 44 + k*14.5*UI.s, 11.5, MOR.ink3, F_SANS, 'left'));
+    ctx.textAlign = 'center';
+
+    // --- the price, or what it is ---
+    const bx = r.x + r.w - 14;
+    let tag, col;
+    if (r.kind === 'pack'){ tag = PAY.label(r.it); col = MOR.ink; }
+    else if (on)   { tag = 'in use'; col = '#8A7238'; }
+    else if (have) { tag = 'put it on';   col = MOR.ink2; }
+    else if (price === 0) { tag = 'yours'; col = MOR.ink3; }
+    else { tag = price + ' ❦'; col = canAfford ? MOR.ink : 'rgba(69,62,52,.34)'; }
+    ctx.textAlign = 'right';
+    txt(tag, bx, y + r.h/2 + (r.kind === 'pack' ? 4 : 4), 12.5, col, F_SANS, 'right',
+        canAfford && !have ? '600' : '');
+    if (r.kind === 'pack' && PAY.provider === 'demo')
+      txt('demo', bx, y + r.h/2 + 20, 9.5, 'rgba(69,62,52,.3)', F_SANS, 'right');
+    ctx.textAlign = 'center';
+  }
+
+  // the promise, in the same place every time
+  {
+    const y = L.noteY + top - sc;
+    if (y > top - 80 && y < H + 40){
+      ctx.fillStyle = 'rgba(112,96,76,.05)';
+      rr(ctx, L.pad, y - 4, L.w, L.noteLines.length*18*UI.s + 18, 9); ctx.fill();
+      ctx.font = 'italic ' + (12*UI.s).toFixed(2) + 'px ' + F_SERIF;
+      L.noteLines.forEach((ln, k) =>
+        txt(ln, W/2, y + 16 + k*18*UI.s, 12, MOR.ink3, F_SERIF));
+    }
+  }
+  ctx.restore();
+
+  if (L.maxScroll > 2){
+    const fade = ctx.createLinearGradient(0, H - 150, 0, H - 86);
+    fade.addColorStop(0, 'rgba(238,232,219,0)'); fade.addColorStop(1, 'rgba(238,232,219,.97)');
+    ctx.fillStyle = fade; ctx.fillRect(0, H - 150, W, 150);
+    const trackTop = top + 6, trackH = H - top - 130;
+    const thumbH = Math.max(34, trackH * (H - top) / (L.total + top));
+    const ty = trackTop + (trackH - thumbH) * (sc / L.maxScroll);
+    ctx.fillStyle = 'rgba(69,62,52,.09)'; rr(ctx, W - 8, trackTop, 4, trackH, 2); ctx.fill();
+    ctx.fillStyle = 'rgba(69,62,52,.3)';  rr(ctx, W - 8.5, ty, 5, thumbH, 2.5); ctx.fill();
+  }
+
+  const hg = ctx.createLinearGradient(0, 0, 0, top);
+  hg.addColorStop(0, MOR.card); hg.addColorStop(.72, MOR.card); hg.addColorStop(1, 'rgba(248,244,234,0)');
+  ctx.fillStyle = hg; ctx.fillRect(0, 0, W, top);
+  txt('The Sundries Catalogue', W/2, H*0.115, 21, MOR.ink, F_SERIF);
+  // measured rather than guessed, so the glyph never lands on the number
+  const cap = S.petals + ' pressed ' + (S.petals === 1 ? 'petal' : 'petals');
+  ctx.font = (12.5*UI.s).toFixed(2) + 'px ' + F_SANS;
+  const capW = ctx.measureText(cap).width, gw = 22, gap = 7;
+  const x0 = W/2 - (gw + gap + capW)/2;
+  petalGlyph(ctx, x0 + gw/2, H*0.152, 11, MOR.ochre);
+  txt(cap, x0 + gw + gap, H*0.157, 12.5, MOR.ink2, F_SANS, 'left');
+  ctx.textAlign = 'center';
+  hint(S.seed ? '<i>' + SP[S.seed].name + '</i> is sown &nbsp;·&nbsp; it comes with the next parcel'
+              : 'Flowers you already know pay petals when they arrive');
+}
+
+/* ============================================================
    MAIN LOOP
    ============================================================ */
 let last = 0, accT = 0;
@@ -2746,11 +3420,14 @@ function frame(ts){
 
 /* ---------- dev surface: tune numbers live from the console ---------- */
 window.PP = { S, V, CFG, GES, SPECIES, VARIANTS, RARITY, CURIOS,
-              save, openParcel, phenotype, harmony, bookStats,
+              save, openParcel, phenotype, harmony, bookStats, updateHUD, note,
               drawFlower, makeGenome, mulberry32, ctx, get W(){return W}, get H(){return H},
               BONDS, BD, bondBetween, DECOR, STORY, storyDue, bondsAt, showSheet, flowerName, bookLayout,
               newFlower, vigour, ailing, ageSill, resolveSill, useTonic, recordFlower,
-              shelfGeom, ledgeGeom, slotAt, ledgeAt,
+              shelfGeom, ledgeGeom, slotAt, ledgeAt, ledgeSlots, neighbours, illRisk,
+              GLAZE_SETS, GS, PAPERS, PA, glazeSet, paper, POTS,
+              PAY, owns, spend, buyCosmetic, buyLedge, sowSeed, buyPetals,
+              shopLayout, shopHit, shopTap, undiscovered, setScreen,
               BOIL, boilTick, paint,
               reset(){ localStorage.removeItem(KEY); location.reload(); } };
 
@@ -2758,6 +3435,7 @@ function paint(){
   ctx.lineJoin = 'round'; ctx.lineCap = 'round';
   if (V.screen === 'table') drawTable();
   else if (V.screen === 'shelf') drawShelf();
+  else if (V.screen === 'shop') drawShop();
   else drawBook();
 }
 

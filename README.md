@@ -45,10 +45,31 @@ Only the ending runs on the wall clock, and there are two of them:
 - **Spent.** Life reaches zero, the flower begins to fade, and after
   `wiltHours` it is **pressed into the Herbarium** — preserved. Nothing leaves
   the collection this way.
-- **Ill.** A small chance per parcel strikes a healthy flower. It fades much
-  faster, and after `illHours` it is **lost** — and does *not* reach the book.
-  A **tonic** cures it. Tonics are deliberately scarcer than illness, so you
-  cannot save everything and have to choose.
+- **Ill.** A healthy flower can sicken. It fades much faster, and after
+  `illHours` it is **lost** — and does *not* reach the book. A **tonic** cures
+  it. Tonics are deliberately scarcer than illness, so you cannot save
+  everything and have to choose.
+
+### Illness has no rate
+
+There is deliberately **no `illChance` constant**. Risk is derived from the
+state of the sill, by `illRisk(i)`, from two causes that are both visible in
+the room:
+
+- **age** — a flower in its last third is frail;
+- **spread** — rot travels from an **ill** neighbour to what stands beside it.
+
+Only illness spreads. A flower that has merely finished its season is harmless,
+because the game asks you to leave that one alone so it reaches the book — it
+would be incoherent to punish you for doing what it asked. So the two endings
+stay genuinely different: one is a slow goodbye, the other is a thing you have
+hours to deal with before it takes a neighbour with it.
+
+This is a monetization decision as much as a design one. The moment relief from
+illness is sold, a single tuning constant becomes a revenue dial, and that is
+the exact mechanism by which a gentle game turns predatory — not by decision,
+but one A/B test at a time. Deriving the risk from what is on screen means
+nobody *can* quietly turn it up without also changing what the player sees.
 
 That split is the whole point: attention preserves, neglect actually costs, and
 a fortnight away can only take the few that were already on their way out — it
@@ -58,6 +79,57 @@ A fading flower keeps less of its bond (a bond is only as strong as its weaker
 flower), droops, closes, and drains toward the colour of the wall. Replacing it
 leaves a hole in the arrangement, so a spent flower is not just a slot to refill
 — it is a puzzle to re-solve.
+
+## Petals and the catalogue
+
+Pressed petals are the soft currency, and they come from the one thing that was
+previously worthless: **a flower you already have**. A discovery pays nothing —
+it is its own reward — while a duplicate pays by rarity, and a flower that
+finishes its season on the sill pays a few more on its way into the book. A
+flower lost to illness pays nothing at all: a loss stays a loss.
+
+That fixes a real problem the economy model exposed earlier: the late game had
+nowhere to go once the book stopped surprising you. Now the book keeps paying
+after it stops teaching.
+
+They are spent in **the Sundries Catalogue** (the *Order* tab), which holds
+glaze sets for the pots, papers for the room, the long ledge, seed packets that
+name a species you have never been sent, and — the only place real money
+appears — bundles of petals.
+
+### Three rules hold it together
+
+1. **Nothing for sale touches the rate.** Glazes and papers are paint. The long
+   ledge is display space: it pays for its first three ornaments whether it
+   holds three or five (`CFG.ledgePays`), so it buys room, not speed. A seed
+   packet fills a gap in the book. None of them makes a parcel arrive sooner,
+   which means no A/B test can ever discover that making the game worse sells
+   better. Three assertions in `tests/framework.js` hold this line.
+2. **No tonics, ever.** Selling relief from a loss the game engineered would
+   convert best and cost most. It is also why illness has no constant to raise.
+3. **Everything is reachable with petals.** Money buys petals faster; it does
+   not buy anything petals cannot. A player who never pays reaches every glaze,
+   every paper and the long ledge — the model puts the whole catalogue at about
+   38 days of ordinary play, and the first glaze at five.
+
+The catalogue states all of this on its own last page, where the player can read
+it, rather than only here.
+
+### Legibility survives a purchase
+
+A glaze set never decides *which* pot gets which glaze — the bond grouping owns
+that, because it has to for the sill to be readable. A set only decides what
+those four glazes look like, and the relief marks stay in the same order in
+every set, so a matched group is still readable by relief alone whatever you
+have bought. The same rule governs papers: every one of them stays inside the
+GROUND envelope, so a paper cannot start competing with the flowers.
+
+### The payment seam
+
+`PAY` is one object with three providers. `demo` is what runs in a browser and
+charges nothing (the button says so). `telegram` opens a Stars invoice, and
+`wx` is stubbed — both need a bot or mini-programme backend to mint the
+invoice, so neither can work from a static file alone.
 
 ## Bonds
 
@@ -283,6 +355,24 @@ Two findings it produced, both of which changed the design:
   scarcity are independent levers. If the sill should ever feel *hungry*, that
   has to come from a shorter `flowerLife` or a shorter `wiltHours`, not from the
   post.
+- **A wilting flower must not spread rot.** The first cut of the derived
+  illness model let anything ailing infect its neighbours, and the sim jumped
+  from 0.4 to **2.0 illnesses a day**, with 1.7 flowers lost. The cause was a
+  contradiction rather than a number: spent flowers sit on the sill for up to
+  `wiltHours` *because the game tells you to leave them there*, and each one was
+  radiating risk for doing it. Restricting spread to genuinely ill neighbours
+  brought it back to 0.40 illnesses and 0.32 losses a day.
+- **The cap was a floor, not a ceiling.** A well-tended full sill reached the
+  old 2.00 cap, so careful arrangement earned no more than adequate arrangement.
+  Bond values came down (kin 0.12 → 0.09, shelf accord 0.10 → 0.08) and the cap
+  went up to 2.50, which is now reachable only by a sill of one family with a
+  full ledge. A good mixed sill lands around ×1.92.
+
+The model also prices the catalogue, because petal income is entirely a function
+of how full the book already is — early on nearly every flower is a discovery
+and pays nothing, late on nearly every one is a duplicate. An average would hide
+exactly the curve being tuned, so the model keeps a book of its own and reports
+week one against the final week (32 → 49 petals a day).
 
 ## Tuning
 
@@ -290,13 +380,19 @@ Everything that governs the pull is in one block at the top of the script:
 
 ```js
 const CFG = {
-  parcelIntervalMs : 90 * 1000,   // accrual rate while away
-  parcelCap        : 8,           // accrual stops here
-  startParcels     : 3,
-  pityAt           : 7,           // a Rare+ guaranteed within this many opens
-  curioChance      : 0.055,       // chance of an oddment instead of a flower
-  harmonyPerPair   : 0.06,        // sill bonus per matching neighbour pair
-  harmonyCap       : 1.75,
+  parcelIntervalMs : 300 * 1000,  // accrual rate while away
+  parcelCap        : 5,           // accrual stops here
+  flowerLife       : 25,          // parcels a healthy flower lasts
+  wiltHours        : 20,          // spent -> pressed into the book, preserved
+  illHours         : 8,           // ill  -> lost, and NOT preserved
+  ill              : { base: 0.0022, age: 0.0130, ageFrom: 0.34, spread: 0.0170 },
+  bond             : {kin:0.09, counter:0.10, tone:0.09, echo:0.06},
+  shelfAccord      : 0.08,
+  harmonyCap       : 2.50,
+  ledgePays        : 3,           // ornaments that count toward speed, ever
+  petal            : { dup: {common:1, uncommon:2, rare:4, legendary:8},
+                       press: 3, first: 0 },
+  shop             : { ledge: 420, seed: 90 },
   squeezeSeconds   : 1.15,        // hold-to-squeeze fill time
   boil             : {fps: 8, frames: 3, amp: 0.95},  // hand-drawn line boil
 };
@@ -330,20 +426,29 @@ so the whole catalogue costs a few hundred lines and zero bytes of art.
 
 Ideas raised and deliberately not built yet, recorded so they aren't lost:
 
-- **Monetization.** An option to buy faster delivery when a player can't find
-  a match. Noted, not designed. See the caveat in the commit discussion: this
-  particular shape sells relief from a frustration the harmony system creates
-  on purpose, which is in tension with the "kind by design" choices above.
-  Cosmetic glazes, wallpapers and vases, or paid story chapters, sit more
-  comfortably next to them.
+- **A second window**, as a progression unlock rather than more pots in one
+  sill. `harmony()` is written against a fixed 3×3 neighbour graph, so this is
+  a real change, not a constant.
+- **Buying faster delivery**, the original monetization idea. Left out on
+  purpose: it sells relief from a frustration the harmony system creates by
+  design, and the catalogue's whole structure rests on nothing for sale
+  touching the rate. The framework would take it as one more row — the
+  question is whether it should.
+- **Paid story chapters**, which sit in the same "sell carefully" bracket as
+  seed packets.
+- **A Telegram build.** The game is already an ordinary web page, so the port
+  is one change: saving to `CloudStorage` rather than `localStorage`. A maximal
+  save — every species, every colourway, full sill, everything found — measures
+  3,390 characters against a 4,096-character limit, so it fits in one key.
 
 ## Structure
 
-One file, in order: tuning and helpers · the Morandi palette · content tables
-(species, variants, bonds, ornaments, letters, parcels) · synthesised audio ·
-genome→phenotype and the flower renderer · parcel bodies · the six gesture
-modules · state, saving and the v1→v2 migration · scoring (`harmony()`) · input
-and dragging · the three screens · the main loop.
+One file, in order: tuning and helpers · the Morandi palette · the boil engine ·
+content tables (species, variants, bonds, ornaments, letters, glaze sets,
+papers, parcels) · synthesised audio · genome→phenotype and the flower renderer ·
+parcel bodies · the six gesture modules · state, saving and the v1→v4
+migrations · scoring (`harmony()`) · input and dragging · the four screens ·
+the catalogue and the payment seam · the main loop.
 
 ## Tests
 
@@ -353,10 +458,18 @@ HTTP (`localStorage` and the tests' own fixtures do not behave on `file://`):
 
 ```
 python3 -m http.server 8899 &
-node tests/framework.js     # 52 assertions
-node tests/boil.js          # 9 assertions: boil cadence + frame-rate floors
+node tests/framework.js     # 106 assertions
+node tests/boil.js          # 10 assertions: boil cadence + frame-rate floors
 node tests/playthrough.js   # opens 16 parcels end to end
+node tests/economy.js       # 60 simulated days; --sweep for a grid
 ```
+
+The framework suite covers the catalogue specifically: that a purchase you
+cannot afford is refused, that the first tap on a price only quotes it and the
+second is the purchase, that a sown packet is what the next parcel holds, that
+the petal count steps aside on the screen that prints it, and — the three that
+matter most — that a longer ledge, a different glaze and a different paper all
+leave the multiplier exactly where it was.
 
 `tests/framework.js` covers the bond tiers, scoring (shelf accord, full sill,
 the cap), drag-to-rearrange versus tap-to-inspect, ledge hit-testing and

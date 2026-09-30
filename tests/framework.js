@@ -306,7 +306,7 @@ const T = (name, cond, extra='') => (cond ? ok : bad).push(name + (extra ? ' :: 
   const migrated = await page.evaluate(() => ({ v: PP.S.v, story: PP.S.story,
                                                 decor: PP.S.decor, streak: PP.S.streak,
                                                 odd: PP.S.odd }));
-  T('v1 save migrates to the current version', migrated.v === 3, 'v=' + migrated.v);
+  T('v1 save migrates to the current version', migrated.v === 4, 'v=' + migrated.v);
   T('old oddments become letters, in order', JSON.stringify(migrated.story) === '["key","frog"]',
     JSON.stringify(migrated.story));
   T('ledge initialised on migration', Array.isArray(migrated.decor) && migrated.decor.length === 3);
@@ -381,6 +381,219 @@ const T = (name, cond, extra='') => (cond ? ok : bad).push(name + (extra ? ' :: 
     T('no flower name repeats a word', bad2.length === 0, JSON.stringify(bad2));
     await pg.close();
   }
+
+
+  // ---------- 12. petals: duplicates pay, losses do not ----------
+  const petals = await page.evaluate(() => {
+    const g = { sp:'moon', va:'dawn', ra:'common', mu:null, seed:7 };
+    PP.S.book = {}; PP.S.petals = 0;
+    const first = PP.recordFlower(g);                 // new species
+    const again = PP.recordFlower(g);                 // duplicate
+    const hue   = PP.recordFlower({ ...g, va:'ink' });// new colourway of a known species
+    const rates = PP.CFG.petal.dup;
+    // and what the sill pays at each of the two endings
+    PP.S.sill = new Array(9).fill(null);
+    PP.S.sill[0] = PP.newFlower(g); PP.S.sill[0].st = 'wilt'; PP.S.sill[0].t0 = 1;
+    PP.S.sill[1] = PP.newFlower({ ...g, sp:'sun' });
+    PP.S.sill[1].st = 'ill';  PP.S.sill[1].t0 = 1;
+    PP.S.petals = 0;
+    const done = PP.resolveSill();
+    return { first, again, hue, rates, done, afterResolve: PP.S.petals,
+             press: PP.CFG.petal.press, firstPay: PP.CFG.petal.first };
+  });
+  T('a new species is a discovery, not a duplicate', petals.first.newSpecies === true);
+  T('the same flower twice is a duplicate', petals.again.newSpecies === false && petals.again.newVariant === false);
+  T('a new colourway still counts as a discovery', petals.hue.newVariant === true);
+  T('rarer duplicates pay more',
+    petals.rates.legendary > petals.rates.rare && petals.rates.rare > petals.rates.common,
+    JSON.stringify(petals.rates));
+  T('a flower that finished its season pays petals',
+    petals.done.pressed === 1 && petals.afterResolve === petals.press,
+    `pressed=${petals.done.pressed} petals=${petals.afterResolve}`);
+  T('a flower lost to illness pays nothing',
+    petals.done.lost === 1 && petals.afterResolve === petals.press,
+    `lost=${petals.done.lost}`);
+
+  // ---------- 13. illness is derived from the sill, not from a constant ----------
+  const ill = await page.evaluate(() => {
+    const mk = () => PP.newFlower({ sp:'moon', va:'dawn', ra:'common', mu:null, seed:3 });
+    PP.S.sill = new Array(9).fill(null);
+    PP.S.sill[4] = mk(); PP.S.sill[4].life = 99;       // young, alone, healthy
+    const alone = PP.illRisk(4);
+    PP.S.sill[5] = mk(); PP.S.sill[5].st = 'wilt';     // one that merely finished
+    const oneSpent = PP.illRisk(4);
+    PP.S.sill[1] = mk(); PP.S.sill[1].st = 'ill';      // one that is actually ill
+    const oneSick = PP.illRisk(4);
+    PP.S.sill[3] = mk(); PP.S.sill[3].st = 'ill';      // two
+    const twoSick = PP.illRisk(4);
+    PP.S.sill[4].life = 1;                             // and now it is old as well
+    const oldToo = PP.illRisk(4);
+    return { alone, oneSpent, oneSick, twoSick, oldToo,
+             hasConstant: 'illChance' in PP.CFG,
+             empty: PP.illRisk(8),
+             nb4: PP.neighbours(4).length, nb0: PP.neighbours(0).length,
+             base: PP.CFG.ill.base };
+  });
+  T('there is no illChance constant to turn up', ill.hasConstant === false);
+  T('a young flower alone carries only the floor risk',
+    Math.abs(ill.alone - ill.base) < 1e-9, String(ill.alone));
+  T('a flower that merely finished its season is harmless to its neighbours',
+    ill.oneSpent === ill.alone, `${ill.alone} -> ${ill.oneSpent}`);
+  T('rot spreads from an ill neighbour', ill.oneSick > ill.alone, `${ill.alone} -> ${ill.oneSick}`);
+  T('two ill neighbours are worse than one', ill.twoSick > ill.oneSick,
+    `${ill.oneSick} -> ${ill.twoSick}`);
+  T('age adds on top of that', ill.oldToo > ill.twoSick, `${ill.twoSick} -> ${ill.oldToo}`);
+  T('an empty pot cannot fall ill', ill.empty === 0);
+  T('the middle pot has four neighbours, a corner two', ill.nb4 === 4 && ill.nb0 === 2,
+    `${ill.nb4}/${ill.nb0}`);
+
+  // ---------- 14. the catalogue ----------
+  const shop = await page.evaluate(() => {
+    PP.S.petals = 0; PP.S.owned = {}; PP.S.glaze = 'kiln'; PP.S.paper = 'stripe';
+    PP.S.ledge = false; PP.S.decor = [null,null,null]; PP.S.seed = null;
+    const poorGlaze = PP.buyCosmetic('glaze', 'harbour');     // cannot afford
+    PP.S.petals = 5000;
+    const rich = PP.buyCosmetic('glaze', 'harbour');
+    const potsNow = PP.POTS()[0].name;
+    const paperBuy = PP.buyCosmetic('paper', 'sprig');
+    const ledgeBuy = PP.buyLedge();
+    const ledgeAgain = PP.buyLedge();                          // already owned
+    const sow = PP.sowSeed(PP.undiscovered()[0] ? PP.undiscovered()[0].id : 'moon');
+    const sowTwice = PP.sowSeed('sun');                        // one packet at a time
+    return { poorGlaze, rich, potsNow, paperBuy, ledgeBuy, ledgeAgain, sow, sowTwice,
+             owned: PP.S.owned, glaze: PP.S.glaze, paper: PP.S.paper,
+             slots: PP.ledgeSlots(), decorLen: PP.S.decor.length,
+             petals: PP.S.petals, spent: PP.S.spent, seed: PP.S.seed,
+             free: PP.owns('glaze','kiln') && PP.owns('paper','stripe') };
+  });
+  // the legibility guarantee: colour is decoration, relief is the grouping
+  const relief = await page.evaluate(() => {
+    const order = PP.GLAZE_SETS.map(g => g.pots.map(x => x.mark).join(','));
+    const sizes = PP.GLAZE_SETS.map(g => g.pots.length);
+    const uniq  = PP.GLAZE_SETS.map(g => new Set(g.pots.map(x => x.mark)).size);
+    return { order, sizes, uniq, first: PP.GLAZE_SETS.map(g => g.pots[0].name) };
+  });
+  T('every glaze set carries the same reliefs in the same order',
+    new Set(relief.order).size === 1, JSON.stringify(relief.order));
+  T('every glaze set has four distinct reliefs',
+    relief.sizes.every(n => n === 4) && relief.uniq.every(n => n === 4),
+    JSON.stringify(relief.sizes) + JSON.stringify(relief.uniq));
+  T('a purchase you cannot afford is refused', shop.poorGlaze === false);
+  T('a purchase you can afford goes through', shop.rich === true && shop.glaze === 'harbour');
+  T('buying a glaze set changes the pots on the sill', shop.potsNow === 'driftwood', shop.potsNow);
+  T('buying a paper changes the room', shop.paperBuy === true && shop.paper === 'sprig');
+  T('the default glaze and paper are free', shop.free === true);
+  T('the long ledge is bought once', shop.ledgeBuy === true && shop.ledgeAgain === false);
+  T('the ledge grows to five places', shop.slots === 5 && shop.decorLen === 5,
+    `${shop.slots}/${shop.decorLen}`);
+  T('a seed packet can be sown', shop.sow === true && !!shop.seed);
+  T('only one packet is sown at a time', shop.sowTwice === false);
+  T('petals are actually deducted', shop.spent > 0 && shop.petals === 5000 - shop.spent,
+    `spent=${shop.spent} left=${shop.petals}`);
+
+  // a sown packet arrives in the next parcel
+  const sown = await page.evaluate(() => {
+    PP.S.seed = 'thistle'; PP.S.mail = 5; PP.S.opened = 99;   // past every letter
+    PP.S.story = PP.STORY.map(x => x.id);
+    PP.openParcel();
+    return { sp: PP.V.genome && PP.V.genome.sp, seed: PP.S.seed, sown: PP.V.sown };
+  });
+  T('a sown packet is what the next parcel holds', sown.sp === 'thistle', JSON.stringify(sown));
+  T('and the packet is used up', sown.seed === null);
+
+  // nothing for sale moves the multiplier
+  const neutral = await page.evaluate(() => {
+    const mk = (sp, va, seed) => PP.newFlower({ sp, va, ra:'common', mu:null, seed });
+    // deliberately short of the cap, or the ceiling would hide any difference
+    PP.S.sill = new Array(9).fill(null);
+    PP.S.sill[0] = mk('moon','dawn',1); PP.S.sill[1] = mk('moon','ink',2);
+    PP.S.ledge = true; PP.S.decor = ['bell','moth','stone',null,null];
+    const three = PP.harmony().mult;
+    PP.S.decor = ['bell','moth','stone','bell','moth'];
+    const five = PP.harmony();
+    PP.S.glaze = 'orchard'; PP.S.paper = 'gingham';
+    const painted = PP.harmony().mult;
+    return { three, five: five.mult, decorOn: five.decorOn, decorFilled: five.decorFilled, painted };
+  });
+  T('a longer ledge does not buy speed', neutral.five === neutral.three,
+    `${neutral.three} -> ${neutral.five}`);
+  T('the ledge pays for three however long it is',
+    neutral.decorOn === 3 && neutral.decorFilled === 5);
+  T('paint does not buy speed', neutral.painted === neutral.three);
+
+  // nothing in the catalogue sells relief
+  const forSale = await page.evaluate(() => {
+    PP.S.petals = 9999; PP.S.seed = null; PP.S.ledge = false;
+    PP.S.decor = [null,null,null];
+    const kinds = [...new Set(PP.shopLayout().rows.map(r => r.kind))];
+    const txt = PP.shopLayout().noteLines.join(' ');
+    return { kinds, txt };
+  });
+  T('the catalogue sells no tonics and no parcels',
+    !forSale.kinds.includes('tonic') && !forSale.kinds.includes('mail') &&
+    forSale.kinds.every(k => ['glaze','paper','ledge','seed','pack'].includes(k)),
+    JSON.stringify(forSale.kinds));
+  T('and says so on the page', /tonics/i.test(forSale.txt) && /faster parcels/i.test(forSale.txt));
+
+  // the catalogue scrolls to its own end, on every screen we care about
+  for (const vp of [{width:360,height:640},{width:390,height:844},{width:520,height:1180}]){
+    const pg = await b.newPage({ viewport: vp, deviceScaleFactor: 1 });
+    pg.on('pageerror', e => errs.push('shop ' + vp.width + ': ' + e.message));
+    await pg.goto('http://127.0.0.1:8899/index.html');
+    await pg.click('#bStart'); await pg.waitForTimeout(300);
+    await pg.evaluate(() => { PP.S.petals = 900; PP.setScreen('shop'); });
+    await pg.waitForTimeout(200);
+    await pg.mouse.move(vp.width/2, vp.height*0.6);
+    await pg.mouse.wheel(0, 400);
+    await pg.waitForTimeout(160);
+    const scrolled = await pg.evaluate(() => PP.V.shopScroll);
+    T(`wheel scrolls the catalogue @${vp.width}x${vp.height}`, scrolled > 0, '0 -> ' + Math.round(scrolled));
+    const reach = await pg.evaluate(() => {
+      PP.V.shopScroll = 1e6; PP.paint();
+      const L = PP.shopLayout();
+      const last = L.rows[L.rows.length - 1];
+      return { bottom: Math.round(L.top + last.y + last.h - PP.V.shopScroll), h: PP.H,
+               noteBottom: Math.round(L.top + L.noteY - PP.V.shopScroll) };
+    });
+    T(`the last row of the catalogue is reachable @${vp.width}x${vp.height}`,
+      reach.bottom <= reach.h - 80, `ends at ${reach.bottom}, needs <= ${reach.h - 80}`);
+    await pg.close();
+  }
+
+  // a tap buys nothing on its own: the first tap only quotes the price
+  const armed = await page.evaluate(() => {
+    PP.S.petals = 5000; PP.S.owned = {}; PP.S.glaze = 'kiln'; PP.V.armedBuy = null;
+    PP.setScreen('shop'); PP.V.shopScroll = 0;
+    const L = PP.shopLayout();
+    const row = L.rows.find(r => r.kind === 'glaze' && r.id === 'harbour');
+    const p = { x: row.x + 20, y: L.top + row.y + row.h/2 - PP.V.shopScroll };
+    PP.shopTap(p);
+    const after1 = { glaze: PP.S.glaze, petals: PP.S.petals, armed: !!PP.V.armedBuy };
+    PP.shopTap(p);
+    return { after1, after2: { glaze: PP.S.glaze, petals: PP.S.petals } };
+  });
+  T('the first tap on a price only quotes it',
+    armed.after1.glaze === 'kiln' && armed.after1.petals === 5000 && armed.after1.armed,
+    JSON.stringify(armed.after1));
+  T('the second tap is the purchase',
+    armed.after2.glaze === 'harbour' && armed.after2.petals === 5000 - 260,
+    JSON.stringify(armed.after2));
+
+  // ---------- 15. the petal pill explains itself ----------
+  // the pill steps aside on the catalogue itself, so ask from somewhere else
+  await page.evaluate(() => { document.getElementById('toast').textContent = ''; PP.setScreen('shelf'); });
+  await page.waitForTimeout(150);
+  const pillShown = await page.evaluate(() => {
+    PP.setScreen('shop');  const onShop = getComputedStyle(document.getElementById('pPetal')).display;
+    PP.setScreen('shelf'); const onSill = getComputedStyle(document.getElementById('pPetal')).display;
+    return { onShop, onSill };
+  });
+  T('the petal pill steps aside on the catalogue, which prints the count itself',
+    pillShown.onShop === 'none' && pillShown.onSill !== 'none', JSON.stringify(pillShown));
+  await page.click('#pPetal'); await page.waitForTimeout(250);
+  const ptxt = await page.evaluate(() => document.getElementById('toast').textContent);
+  T('petal pill explains itself', /petal/i.test(ptxt) && /Order/.test(ptxt),
+    JSON.stringify(ptxt.slice(0,70)));
 
   console.log('PASS ' + ok.length + '\n  ' + ok.join('\n  '));
   if (bad.length) console.log('\nFAIL ' + bad.length + '\n  ' + bad.join('\n  '));

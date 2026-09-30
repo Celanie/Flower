@@ -12,10 +12,19 @@
 const CFG = {
   parcelIntervalMs: 300e3, parcelCap: 5, startParcels: 3,
   flowerLife: 25, lifeSpread: 0.22, wiltHours: 20, illHours: 8,
-  illChance: 0.005, tonicChance: 0.018, tonicStart: 1,
-  decorChance: 0.05, curioChance: 0.055, harmonyCap: 2.0,
+  // illness is derived, exactly as the game derives it — see illRiskOf()
+  ill: { base: 0.0022, age: 0.0130, ageFrom: 0.34, spread: 0.0170 },
+  tonicChance: 0.018, tonicStart: 1,
+  decorChance: 0.05, curioChance: 0.055, harmonyCap: 2.5,
   bondEff: 0.65,          // fraction of the 12 neighbour pairs a player bonds
-  avgBondValue: 0.085,    // mean of the four tiers, weighted to how often each lands
+  avgBondValue: 0.083,    // mean of the four tiers, weighted to how often each lands
+  ledgePays: 3,
+  petal: { dup: {common:1, uncommon:2, rare:4, legendary:8}, press: 3, first: 0 },
+  shop: { ledge: 420, seed: 90 },
+  glazePrices: [260, 300, 300], paperPrices: [180, 180, 220],
+  // how often each rarity turns up, and how much of the book is already filled
+  // at a given point — both needed to price petal income honestly
+  rarityMix: { common: 0.66, uncommon: 0.24, rare: 0.085, legendary: 0.015 },
 };
 
 const PLAYER = {
@@ -24,6 +33,7 @@ const PLAYER = {
   hoursBetween: [8, 6, 10],   // sums to 24
   days: 60,
   tonicPolicy: 'ill-first',   // spend on illness; let spent flowers go to the book
+  ornaments: 3,               // how many are on the ledge, once they have turned up
 };
 
 function mulberry32(a){ return () => { a = a + 0x6D2B79F5 | 0;
@@ -36,7 +46,9 @@ function multiplier(sill){
   const vig = sill.filter(Boolean).reduce((a,f) => a + f.vig, 0) / filled;
   const pairs = 12 * (filled/9);
   const sum = pairs * CFG.bondEff * CFG.avgBondValue * vig;
-  const extras = (filled === 9 ? 0.10 : 0) + (filled >= 6 ? 0.10 : 0) + 0.06;
+  //                full sill          a shelf in accord      the ledge, capped
+  const extras = (filled === 9 ? 0.10 : 0) + (filled >= 6 ? 0.08 : 0)
+               + Math.min(CFG.ledgePays, PLAYER.ornaments)*0.03;
   return Math.min(CFG.harmonyCap, 1 + sum + extras);
 }
 
@@ -45,16 +57,25 @@ function run(cfg, verbose){
   const r = mulberry32(12345);
   const sill = new Array(9).fill(null);
   let mail = CFG.startParcels, tonics = CFG.tonicStart, t = 0;   // t in ms
-  let lastAccrual = 0;
+  let lastAccrual = 0, petals = 0;
+  /* 14 species x 5 colourways. The model needs a book because petal income is
+     entirely a function of how much of it is already filled: early on nearly
+     every flower is a discovery and pays nothing, and late on nearly every one
+     is a duplicate. An average would hide exactly the curve we are tuning. */
+  const seen = new Set();
   const stat = { opened:0, flowers:0, placed:0, pressed:0, lost:0,
-                 tonicsGot:0, tonicsUsed:0, illEvents:0, multSum:0, multN:0, occSum:0 };
+                 tonicsGot:0, tonicsUsed:0, illEvents:0, multSum:0, multN:0, occSum:0,
+                 petalsByDay: new Array(PLAYER.days).fill(0), discoveries:0, duplicates:0 };
 
   const resolve = () => {
     for (let i=0;i<9;i++){
       const f = sill[i]; if (!f || f.st === 'ok') continue;
       const span = (f.st === 'ill' ? CFG.illHours : CFG.wiltHours) * 3600e3;
       if (t - f.t0 < span) continue;
-      if (f.st === 'wilt') stat.pressed++; else stat.lost++;
+      if (f.st === 'wilt'){
+        stat.pressed++; petals += CFG.petal.press;
+        stat.petalsByDay[Math.min(PLAYER.days - 1, Math.floor(t/864e5))] += CFG.petal.press;
+      } else stat.lost++;
       sill[i] = null;
     }
   };
@@ -73,18 +94,43 @@ function run(cfg, verbose){
     while (mail < CFG.parcelCap && t - lastAccrual >= iv){ mail++; lastAccrual += iv; }
   };
 
+  // the same two causes the game uses: age, and rot standing next to rot
+  const nbrs = i => { const c = i%3, rw = (i-c)/3, o = [];
+    if (c>0) o.push(i-1); if (c<2) o.push(i+1);
+    if (rw>0) o.push(i-3); if (rw<2) o.push(i+3); return o; };
+  const illRiskOf = i => {
+    const f = sill[i];
+    if (!f || f.st !== 'ok') return 0;
+    const C = CFG.ill, last = Math.max(1, CFG.flowerLife*C.ageFrom);
+    const age = Math.min(1, Math.max(0, 1 - f.life/last));
+    let sick = 0;
+    for (const j of nbrs(i)) if (sill[j] && sill[j].st === 'ill') sick++;   // only illness spreads
+    return C.base + C.age*age + C.spread*sick;
+  };
+
   const openOne = () => {
     mail--; stat.opened++;
+    const risk = [];
+    for (let i=0;i<9;i++) risk[i] = illRiskOf(i);   // measured before anything moves
     for (let i=0;i<9;i++){                       // age the sill
       const f = sill[i]; if (!f || f.st !== 'ok') continue;
       f.life--;
       if (f.life <= 0){ f.st = 'wilt'; f.t0 = t; }
-      else if (r() < CFG.illChance){ f.st = 'ill'; f.t0 = t; stat.illEvents++; }
+      else if (r() < risk[i]){ f.st = 'ill'; f.t0 = t; stat.illEvents++; }
     }
     const roll = r();
     if (roll < CFG.tonicChance){ tonics++; stat.tonicsGot++; return; }
     if (roll < CFG.tonicChance + CFG.decorChance) return;         // ornament
     stat.flowers++;
+    // what it is, and therefore what it pays
+    const key = Math.floor(r()*14) + ':' + Math.floor(r()*5);
+    let ra = 'common', roll2 = r(), acc = 0;
+    for (const k in CFG.rarityMix){ acc += CFG.rarityMix[k]; if (roll2 < acc){ ra = k; break; } }
+    let got;
+    if (seen.has(key)){ got = CFG.petal.dup[ra]; stat.duplicates++; }
+    else { seen.add(key); got = CFG.petal.first; stat.discoveries++; }
+    petals += got;
+    stat.petalsByDay[Math.min(PLAYER.days - 1, Math.floor(t/864e5))] += got;
     const slot = sill.indexOf(null);
     if (slot >= 0){
       sill[slot] = { life: Math.round(CFG.flowerLife*(1 - CFG.lifeSpread + 2*CFG.lifeSpread*r())),
@@ -116,7 +162,16 @@ function run(cfg, verbose){
     }
   }
   const days = PLAYER.days, sess = stat.multN;
+  const late = stat.petalsByDay.slice(-7).reduce((a,b) => a+b, 0) / 7;
+  const early = stat.petalsByDay.slice(0, 7).reduce((a,b) => a+b, 0) / 7;
+  const catalogue = CFG.glazePrices.reduce((a,b)=>a+b,0) +
+                    CFG.paperPrices.reduce((a,b)=>a+b,0) + CFG.shop.ledge;
   return {
+    petalsPerDay: petals/days, petalsEarly: early, petalsLate: late,
+    petalsTotal: petals, discoveries: stat.discoveries, duplicates: stat.duplicates,
+    bookAt: seen.size, catalogue,
+    daysToFirstGlaze: 260/Math.max(0.01, late),
+    daysToWholeCatalogue: catalogue/Math.max(0.01, late),
     parcelsPerDay: stat.opened/days,
     flowersPerDay: stat.flowers/days,
     placedPerDay:  stat.placed/days,
@@ -139,7 +194,10 @@ function report(label, o){
   placed/day       ${f(o.placedPerDay,1)}     surplus     ${f(o.surplus,1)}x  (flowers received per slot needed)
   pressed/day      ${f(o.pressedPerDay,2)}     lost/day    ${f(o.lostPerDay,2)}
   illnesses/day    ${f(o.illPerDay,2)}     tonics/day  ${f(o.tonicsGotPerDay,2)}  (cover ${(o.tonicCoverage*100).toFixed(0)}% of illness)
-  avg multiplier   ${f(o.avgMult,2)}     occupancy   ${f(o.avgOccupancy,1)}/9`);
+  avg multiplier   ${f(o.avgMult,2)}     occupancy   ${f(o.avgOccupancy,1)}/9
+  petals/day       ${f(o.petalsPerDay,1)}     week 1      ${f(o.petalsEarly,1)}   final week ${f(o.petalsLate,1)}
+  book at day 60   ${f(o.bookAt,0)}/70   ${o.discoveries} discoveries, ${o.duplicates} duplicates
+  a 260 glaze      ${f(o.daysToFirstGlaze,1)}d    the lot (${o.catalogue}) ${f(o.daysToWholeCatalogue,1)}d  (at the final-week rate)`);
 }
 
 if (process.argv.includes('--sweep')){
