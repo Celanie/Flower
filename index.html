@@ -3334,9 +3334,11 @@ function drawShop(){
   ctx.restore();
 
   if (L.maxScroll > 2){
-    const fade = ctx.createLinearGradient(0, H - 150, 0, H - 86);
+    // the catalogue's hint runs to two lines, so the fade has to be fully opaque
+    // above it rather than still ramping through it
+    const fade = ctx.createLinearGradient(0, H - 190, 0, H - 118);
     fade.addColorStop(0, 'rgba(238,232,219,0)'); fade.addColorStop(1, 'rgba(238,232,219,.97)');
-    ctx.fillStyle = fade; ctx.fillRect(0, H - 150, W, 150);
+    ctx.fillStyle = fade; ctx.fillRect(0, H - 190, W, 190);
     const trackTop = top + 6, trackH = H - top - 130;
     const thumbH = Math.max(34, trackH * (H - top) / (L.total + top));
     const ty = trackTop + (trackH - thumbH) * (sc / L.maxScroll);
